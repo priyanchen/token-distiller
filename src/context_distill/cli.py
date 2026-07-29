@@ -163,6 +163,27 @@ def cmd_hook_read(args) -> int:
     return 0
 
 
+def cmd_repo(args) -> int:
+    from context_distill import repo_pack
+
+    result = repo_pack.pack(
+        args.dir, include=args.include, exclude=args.exclude, allow_vision=not args.no_vision
+    )
+    output = repo_pack.render(result, style=args.style)
+
+    if args.output:
+        Path(args.output).write_text(output)
+        print(f"wrote {args.output}  ({len(result.files)} files, ~{result.total_tokens_est} tokens)")
+    else:
+        print(output)
+
+    if result.skipped:
+        print(f"\nskipped {len(result.skipped)} file(s):", file=sys.stderr)
+        for s in result.skipped[:20]:
+            print(f"  {s}", file=sys.stderr)
+    return 0
+
+
 def cmd_install_hook(args) -> int:
     from context_distill import hook_installer
 
@@ -197,6 +218,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_hook = sub.add_parser("hook-read", help="internal: PreToolUse Read hook entry point")
     p_hook.add_argument("--no-vision", action="store_true")
     p_hook.set_defaults(func=cmd_hook_read)
+
+    p_repo = sub.add_parser("repo", help="Repomix-style repo pack")
+    p_repo.add_argument("dir")
+    p_repo.add_argument("--include")
+    p_repo.add_argument("--exclude")
+    p_repo.add_argument("--style", choices=["xml", "markdown"], default="markdown")
+    p_repo.add_argument("--output")
+    p_repo.add_argument("--no-vision", action="store_true")
+    p_repo.set_defaults(func=cmd_repo)
 
     p_install = sub.add_parser("install-hook", help="wire the PreToolUse Read hook into settings.json")
     p_install.add_argument("--target", choices=["project", "global"], default="project")
