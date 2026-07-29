@@ -237,6 +237,68 @@ def cmd_query(args) -> int:
     return 0
 
 
+def cmd_hook_activity(args) -> int:
+    """Invoked by Claude Code's PostToolUse hook on every tool call. Records the
+    call for activity-mode classification; never blocks or alters anything."""
+    payload = json.load(sys.stdin)
+    from context_distill import activity
+
+    activity.record(
+        tool_name=payload.get("tool_name", ""),
+        tool_input=payload.get("tool_input") or {},
+        session_id=payload.get("session_id"),
+    )
+    return 0
+
+
+def cmd_mode(args) -> int:
+    from context_distill import activity
+
+    result = activity.current_mode(session_id=args.session_id)
+    if args.json:
+        print(json.dumps(result, indent=2))
+    else:
+        print(
+            f"mode: {result['mode']}  "
+            f"(window={result['window_size']}, counts={result['bucket_counts']})"
+        )
+    return 0
+
+
+def cmd_audit(args) -> int:
+    from context_distill import activity, session_audit
+
+    mode = activity.current_mode()["mode"]
+    findings = session_audit.audit(args.path, memory_dir=args.memory_dir, mode=mode)
+
+    if args.json:
+        print(json.dumps(findings, indent=2))
+        return 0
+
+    print(f"session mode: {mode}")
+    for f in findings["files"]:
+        print(f"  {f['path']}: {f['bytes']} bytes, ~{f['tokens_est']} tokens, {f['lines']} lines")
+
+    sections = [
+        ("duplicate content", findings["duplicates"], "occurrences"),
+        ("orphaned memory files", findings["orphaned_memory_files"], "path"),
+    ]
+    if mode in ("review", "infra"):
+        sections.reverse()
+
+    for label, items, kind in sections:
+        print(f"\n{label}: {len(items)} finding(s)")
+        for item in items[:10]:
+            if kind == "occurrences":
+                print(f"  {item['occurrences']}x: {item['snippet']}")
+            else:
+                print(f"  {item}")
+
+    if not args.memory_dir:
+        print("\n(pass --memory-dir to also check for orphaned per-topic memory files)")
+    return 0
+
+
 def cmd_install_hook(args) -> int:
     from context_distill import hook_installer
 
@@ -293,6 +355,22 @@ def build_parser() -> argparse.ArgumentParser:
     p_query.add_argument("--json", action="store_true")
     p_query.add_argument("--no-semantic", action="store_true")
     p_query.set_defaults(func=cmd_query)
+
+    p_hook_activity = sub.add_parser(
+        "hook-activity", help="internal: PostToolUse activity-tracking hook entry point"
+    )
+    p_hook_activity.set_defaults(func=cmd_hook_activity)
+
+    p_mode = sub.add_parser("mode", help="current session activity-mode classification")
+    p_mode.add_argument("--session-id")
+    p_mode.add_argument("--json", action="store_true")
+    p_mode.set_defaults(func=cmd_mode)
+
+    p_audit = sub.add_parser("audit", help="CLAUDE.md/MEMORY.md structural audit")
+    p_audit.add_argument("path", nargs="?", default=".")
+    p_audit.add_argument("--memory-dir")
+    p_audit.add_argument("--json", action="store_true")
+    p_audit.set_defaults(func=cmd_audit)
 
     p_install = sub.add_parser("install-hook", help="wire the PreToolUse Read hook into settings.json")
     p_install.add_argument("--target", choices=["project", "global"], default="project")
