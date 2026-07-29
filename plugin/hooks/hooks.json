@@ -1,0 +1,21 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          { "type": "command", "if": "Read(*.pdf)", "command": "\"${CLAUDE_PLUGIN_ROOT}/.venv/bin/distill\" hook-read", "timeout": 60000 },
+          { "type": "command", "if": "Read(*.jpg)", "command": "\"${CLAUDE_PLUGIN_ROOT}/.venv/bin/distill\" hook-read", "timeout": 60000 },
+          { "type": "command", "if": "Read(*.jpeg)", "command": "\"${CLAUDE_PLUGIN_ROOT}/.venv/bin/distill\" hook-read", "timeout": 60000 },
+          { "type": "command", "if": "Read(*.png)", "command": "\"${CLAUDE_PLUGIN_ROOT}/.venv/bin/distill\" hook-read", "timeout": 60000 },
+          { "type": "command", "if": "Read(*.heic)", "command": "\"${CLAUDE_PLUGIN_ROOT}/.venv/bin/distill\" hook-read", "timeout": 60000 },
+          { "type": "command", "if": "Read(*.heif)", "command": "\"${CLAUDE_PLUGIN_ROOT}/.venv/bin/distill\" hook-read", "timeout": 60000 },
+          { "type": "command", "if": "Read(*.tiff)", "command": "\"${CLAUDE_PLUGIN_ROOT}/.venv/bin/distill\" hook-read", "timeout": 60000 },
+          { "type": "command", "if": "Read(*.tif)", "command": "\"${CLAUDE_PLUGIN_ROOT}/.venv/bin/distill\" hook-read", "timeout": 60000 },
+          { "type": "command", "if": "Read(*.bmp)", "command": "\"${CLAUDE_PLUGIN_ROOT}/.venv/bin/distill\" hook-read", "timeout": 60000 },
+          { "type": "command", "if": "Read(*.webp)", "command": "\"${CLAUDE_PLUGIN_ROOT}/.venv/bin/distill\" hook-read", "timeout": 60000 }
+        ]
+      }
+    ]
+  }
+}

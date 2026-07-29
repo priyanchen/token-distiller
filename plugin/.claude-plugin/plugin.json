@@ -1,0 +1,12 @@
+{
+  "name": "context-distill",
+  "description": "Distills PDFs and photos into token-efficient text before they enter context, packs repos, indexes content for retrieval, and tracks session activity mode.",
+  "author": {
+    "name": "Sri PriYa N. Chen"
+  },
+  "homepage": "https://github.com/priyachen/context-distill",
+  "repository": "https://github.com/priyachen/context-distill",
+  "version": "0.1.0",
+  "license": "MIT",
+  "keywords": ["token", "context", "pdf", "ocr", "retrieval", "rag"]
+}
