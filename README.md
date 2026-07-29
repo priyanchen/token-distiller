@@ -10,8 +10,15 @@ Pure Python. No shell scripts, no Node/TypeScript.
 brew install poppler   # required by pdf2image for PDF page rasterization
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install .
 ```
+
+Use a regular install, not `pip install -e .`. On this machine the editable install's
+`_editable_impl_context_distill.pth` was silently ignored by `site.py` (the file was
+readable and its contents correct, and a byte-identical copy under a different filename
+*was* honored — root cause unresolved), leaving `context_distill` unimportable. A regular
+install copies the package into `site-packages` and avoids the `.pth` indirection
+entirely. Re-run `pip install .` after editing source.
 
 Optional: set `ANTHROPIC_API_KEY` to enable vision-model fallback for low-confidence OCR pages. Set `VOYAGE_API_KEY` and `pip install -e ".[rag-semantic]"` to enable semantic (embedding) retrieval on top of the default BM25 keyword index.
 
