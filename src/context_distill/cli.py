@@ -184,6 +184,59 @@ def cmd_repo(args) -> int:
     return 0
 
 
+def cmd_index(args) -> int:
+    from context_distill import chunker, embeddings, index_store, repo_pack
+
+    result = repo_pack.pack(args.dir, allow_vision=not args.no_vision)
+    total_chunks = 0
+    embed_model = None
+    embed_warned = False
+
+    for f in result.files:
+        index_store.clear_source(f.path)
+        pieces = chunker.chunk_text(f.text)
+        if not pieces:
+            continue
+        chunk_ids = index_store.add_chunks(f.path, pieces)
+        total_chunks += len(chunk_ids)
+
+        if not args.no_semantic:
+            try:
+                vectors = embeddings.embed_texts(pieces)
+                index_store.add_embeddings(chunk_ids, vectors, embeddings.VOYAGE_MODEL)
+                embed_model = embeddings.VOYAGE_MODEL
+            except embeddings.EmbeddingsUnavailable as exc:
+                if not embed_warned:
+                    print(f"semantic embeddings skipped: {exc}", file=sys.stderr)
+                    embed_warned = True
+
+    mode = f"embeddings via {embed_model}" if embed_model else "BM25 keyword index only"
+    print(f"indexed {len(result.files)} file(s), {total_chunks} chunk(s) ({mode})")
+    return 0
+
+
+def cmd_query(args) -> int:
+    from context_distill import retrieval
+
+    results = retrieval.query(args.question, top_k=args.top_k, use_semantic=not args.no_semantic)
+
+    if args.json:
+        print(json.dumps(results, indent=2))
+        return 0 if results else 1
+
+    if not results:
+        print("no indexed content found — run `distill index <dir>` first")
+        return 1
+
+    for r in results:
+        preview = r["text"][:300].strip()
+        if len(r["text"]) > 300:
+            preview += "..."
+        print(f"[{r['score']:.3f}] {r['source_path']} (chunk {r['chunk_index']})")
+        print(f"  {preview}\n")
+    return 0
+
+
 def cmd_install_hook(args) -> int:
     from context_distill import hook_installer
 
@@ -227,6 +280,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_repo.add_argument("--output")
     p_repo.add_argument("--no-vision", action="store_true")
     p_repo.set_defaults(func=cmd_repo)
+
+    p_index = sub.add_parser("index", help="build a retrieval index over a directory")
+    p_index.add_argument("dir")
+    p_index.add_argument("--no-vision", action="store_true")
+    p_index.add_argument("--no-semantic", action="store_true")
+    p_index.set_defaults(func=cmd_index)
+
+    p_query = sub.add_parser("query", help="query the retrieval index")
+    p_query.add_argument("question")
+    p_query.add_argument("--top-k", type=int, default=5)
+    p_query.add_argument("--json", action="store_true")
+    p_query.add_argument("--no-semantic", action="store_true")
+    p_query.set_defaults(func=cmd_query)
 
     p_install = sub.add_parser("install-hook", help="wire the PreToolUse Read hook into settings.json")
     p_install.add_argument("--target", choices=["project", "global"], default="project")
