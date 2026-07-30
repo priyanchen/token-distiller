@@ -7,7 +7,7 @@ name = "context-distill"
 version = "0.1.0"
 description = "Distill PDFs, photos, and repos into token-efficient context for LLM agents, with local retrieval and activity-aware session auditing."
 readme = "README.md"
-license = "MIT"
+license = "PolyForm-Noncommercial-1.0.0"
 authors = [
     { name = "Sri PriYa N. Chen" },
 ]
