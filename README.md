@@ -20,7 +20,7 @@ readable and its contents correct, and a byte-identical copy under a different f
 install copies the package into `site-packages` and avoids the `.pth` indirection
 entirely. Re-run `pip install .` after editing source.
 
-Optional: set `ANTHROPIC_API_KEY` to enable vision-model fallback for low-confidence OCR pages. Set `VOYAGE_API_KEY` and `pip install -e ".[rag-semantic]"` to enable semantic (embedding) retrieval on top of the default BM25 keyword index.
+Optional: set `ANTHROPIC_API_KEY` to enable vision-model fallback for low-confidence OCR pages. Set `VOYAGE_API_KEY` and `pip install ".[rag-semantic]"` to enable semantic (embedding) retrieval on top of the default BM25 keyword index.
 
 ## CLI
 
