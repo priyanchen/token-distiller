@@ -33,8 +33,37 @@ distill query "<question>"        # query the index
 distill mode                      # current session activity mode
 distill audit [path]              # CLAUDE.md/MEMORY.md structural audit
 distill report                    # cumulative token/savings report
+distill expand <handle>           # full distilled text for any handle (--list to browse)
 distill install-hook              # wire the PreToolUse Read-interception hook into a project
 ```
+
+## How it avoids losing anything
+
+Every distillation is stored whole, keyed by a SHA-256 of the file's bytes, before any
+shortening happens. Anything the hook shortens carries a handle, and `distill expand
+<handle>` returns the complete text. Concretely:
+
+- **Re-reads collapse.** Reading the same unchanged file twice in a session returns a
+  one-line pointer the second time instead of the whole document again (7,634 → 287
+  chars measured). Edit the file and the hash changes, so it is re-distilled in full —
+  a stale cache can never be served.
+- **Repeated page boilerplate is restated once.** A line must appear on ≥80% of pages to
+  qualify, so a running copyright footer (25/25 pages) collapses while a structural
+  marker like `Example:` (15/25) is left alone. Collapsed lines are listed at the top of
+  the output.
+- **Large documents defer rather than truncate.** Past `CONTEXT_DISTILL_LARGE_DOC_TOKENS`
+  (default 8000) the hook returns a head plus retrieval instructions. Nothing is
+  discarded — `distill expand` or `distill index` + `distill query` reach the rest.
+
+Toggle any of it off: `CONTEXT_DISTILL_CACHE=0`, `CONTEXT_DISTILL_REREAD_COLLAPSE=0`,
+`CONTEXT_DISTILL_BOILERPLATE=0`.
+
+## A note on the numbers
+
+`raw_tokens_est` models what the **host** pays to ingest the file, not what its text
+alone would cost. Reading a PDF natively renders each page to an image and bills those
+pixels on top of the text, so a 25-page text PDF costs ~60,000 tokens to read raw but
+~1,800 distilled (33x). Scoring it as text-only would have reported a meaningless 1.0x.
 
 ## License
 

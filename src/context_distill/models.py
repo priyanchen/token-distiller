@@ -27,6 +27,7 @@ class DistillResult:
     source_type: str  # "pdf" | "image"
     pages: list[PageResult]
     duration_ms: int = 0
+    boilerplate: list[dict] = field(default_factory=list)
 
     @property
     def raw_tokens_est(self) -> int:
@@ -45,6 +46,16 @@ class DistillResult:
     @property
     def text(self) -> str:
         return "\n\n".join(p.text for p in self.pages)
+
+    @property
+    def rendered_text(self) -> str:
+        """Text as a consumer should see it: collapsed boilerplate is restated once up
+        front rather than silently dropped."""
+        if not self.boilerplate:
+            return self.text
+        from context_distill.boilerplate import render_manifest
+
+        return f"{render_manifest(self.boilerplate)}\n\n{self.text}"
 
     @property
     def warnings(self) -> list[str]:

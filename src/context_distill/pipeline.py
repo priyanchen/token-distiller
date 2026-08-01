@@ -1,10 +1,27 @@
 import time
 from pathlib import Path
 
-from context_distill import image_ingest, ocr as ocr_mod, pdf_extract, vision_fallback
-from context_distill.config import OCR_CONF_THRESHOLD, OCR_MIN_WORD_COUNT, PDF_EXTENSIONS
+from context_distill import (
+    boilerplate as boilerplate_mod,
+    cache,
+    image_ingest,
+    ocr as ocr_mod,
+    pdf_extract,
+    vision_fallback,
+)
+from context_distill.config import (
+    BOILERPLATE_ENABLED,
+    CACHE_ENABLED,
+    OCR_CONF_THRESHOLD,
+    OCR_MIN_WORD_COUNT,
+    PDF_EXTENSIONS,
+)
 from context_distill.models import DistillMethod, DistillResult, PageResult
-from context_distill.tokens import estimate_image_tokens, estimate_text_tokens
+from context_distill.tokens import (
+    estimate_image_tokens,
+    estimate_pdf_page_host_tokens,
+    estimate_text_tokens,
+)
 
 
 def _distill_ocr_or_vision(page_index: int, image, allow_vision: bool = True) -> PageResult:
@@ -49,29 +66,49 @@ def _distill_ocr_or_vision(page_index: int, image, allow_vision: bool = True) ->
     )
 
 
+def _apply_boilerplate(pages: list[PageResult]) -> list[dict]:
+    if not BOILERPLATE_ENABLED or len(pages) < 2:
+        return []
+    stripped, manifest = boilerplate_mod.strip_boilerplate([p.text for p in pages])
+    if not manifest:
+        return []
+    for page, new_text in zip(pages, stripped):
+        page.text = new_text
+        page.distilled_tokens_est = estimate_text_tokens(new_text)
+    return manifest
+
+
 def distill_pdf(path: str, allow_vision: bool = True) -> DistillResult:
     start = time.monotonic()
-    native_pages = pdf_extract.extract_native_pages(path)
+    native_pages = pdf_extract.extract_pages_with_dimensions(path)
     pages: list[PageResult] = []
 
-    for i, native_text in enumerate(native_pages):
+    for i, (native_text, width_pt, height_pt) in enumerate(native_pages):
         if pdf_extract.has_native_text(native_text):
-            tok = estimate_text_tokens(native_text)
             pages.append(
                 PageResult(
                     page_index=i,
                     method=DistillMethod.NATIVE_TEXT,
                     text=native_text,
-                    raw_tokens_est=tok,
-                    distilled_tokens_est=tok,
+                    raw_tokens_est=estimate_pdf_page_host_tokens(
+                        width_pt, height_pt, native_text
+                    ),
+                    distilled_tokens_est=estimate_text_tokens(native_text),
                 )
             )
         else:
             image = pdf_extract.rasterize_page(path, i)
             pages.append(_distill_ocr_or_vision(i, image, allow_vision=allow_vision))
 
+    manifest = _apply_boilerplate(pages)
     duration_ms = round((time.monotonic() - start) * 1000)
-    return DistillResult(source_path=str(path), source_type="pdf", pages=pages, duration_ms=duration_ms)
+    return DistillResult(
+        source_path=str(path),
+        source_type="pdf",
+        pages=pages,
+        duration_ms=duration_ms,
+        boilerplate=manifest,
+    )
 
 
 def distill_image(path: str, allow_vision: bool = True) -> DistillResult:
@@ -79,13 +116,35 @@ def distill_image(path: str, allow_vision: bool = True) -> DistillResult:
     image = image_ingest.load_image(path)
     page = _distill_ocr_or_vision(0, image, allow_vision=allow_vision)
     duration_ms = round((time.monotonic() - start) * 1000)
-    return DistillResult(source_path=str(path), source_type="image", pages=[page], duration_ms=duration_ms)
+    return DistillResult(
+        source_path=str(path), source_type="image", pages=[page], duration_ms=duration_ms
+    )
 
 
-def distill(path: str, allow_vision: bool = True) -> DistillResult:
+def _distill_uncached(path: str, allow_vision: bool = True) -> DistillResult:
     suffix = Path(path).suffix.lower()
     if suffix in PDF_EXTENSIONS:
         return distill_pdf(path, allow_vision=allow_vision)
     if image_ingest.is_image(path):
         return distill_image(path, allow_vision=allow_vision)
     raise ValueError(f"unsupported file type: {suffix}")
+
+
+def distill(
+    path: str, allow_vision: bool = True, use_cache: bool = True
+) -> tuple[DistillResult, int | None, bool]:
+    """Returns (result, cache_handle, was_cache_hit). The handle is what `distill expand`
+    resolves, so any caller that shortens its output can still point at the full text."""
+    if not (use_cache and CACHE_ENABLED):
+        return _distill_uncached(path, allow_vision=allow_vision), None, False
+
+    hash_value = cache.content_hash(path)
+    hit = cache.get(hash_value)
+    if hit is not None:
+        handle, result = hit
+        result.source_path = str(path)
+        return result, handle, True
+
+    result = _distill_uncached(path, allow_vision=allow_vision)
+    handle = cache.put(hash_value, result)
+    return result, handle, False

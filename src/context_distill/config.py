@@ -39,6 +39,30 @@ DEFAULT_TOP_K = 5
 # --- M4: activity mode ---
 ACTIVITY_WINDOW_SIZE = 10
 
+# --- M5: cache, boilerplate, large-document handling ---
+CACHE_ENABLED = os.environ.get("CONTEXT_DISTILL_CACHE", "1") != "0"
+# Re-reading an unchanged file in the same session returns a pointer instead of the
+# full text. The text is never discarded — `distill expand <handle>` returns it.
+REREAD_COLLAPSE_ENABLED = os.environ.get("CONTEXT_DISTILL_REREAD_COLLAPSE", "1") != "0"
+
+# A line must appear on at least this fraction of pages to count as boilerplate.
+# Deliberately high: at 0.8 a 25-page deck's copyright footer (25/25) collapses while a
+# structural marker like "Example:" (15/25) survives.
+BOILERPLATE_PAGE_FRACTION = 0.8
+BOILERPLATE_MIN_PAGES = 3
+BOILERPLATE_MAX_LINE_CHARS = 120
+BOILERPLATE_ENABLED = os.environ.get("CONTEXT_DISTILL_BOILERPLATE", "1") != "0"
+
+# Beyond this, the hook returns an outline + head + expand handle rather than the whole
+# document. Deferred, not dropped: the full text stays retrievable via `distill expand`.
+LARGE_DOC_TOKEN_THRESHOLD = int(os.environ.get("CONTEXT_DISTILL_LARGE_DOC_TOKENS", "8000"))
+LARGE_DOC_HEAD_TOKENS = 1500
+
+# Anthropic downscales images whose long edge exceeds this before billing.
+IMAGE_MAX_EDGE_PX = 1568
+# Rasterization DPI a host uses when turning a PDF page into an image for the model.
+HOST_PDF_RENDER_DPI = 150
+
 
 def ensure_home() -> Path:
     HOME.mkdir(parents=True, exist_ok=True)

@@ -60,24 +60,37 @@ def _log_run(result, trigger: str) -> None:
 def cmd_file(args) -> int:
     from context_distill import pipeline
 
-    result = pipeline.distill(args.path, allow_vision=not args.no_vision)
+    result, handle, cached = pipeline.distill(
+        args.path, allow_vision=not args.no_vision, use_cache=not args.no_cache
+    )
     if not args.no_save_log:
         _log_run(result, trigger="cli")
 
     if args.json:
-        print(json.dumps(_result_to_dict(result), indent=2))
+        payload = _result_to_dict(result)
+        payload["cache_handle"] = handle
+        payload["cache_hit"] = cached
+        print(json.dumps(payload, indent=2))
     else:
-        print(f"{result.source_path}  ({result.source_type}, {len(result.pages)} page(s))")
+        suffix = "  [cached]" if cached else ""
+        print(
+            f"{result.source_path}  ({result.source_type}, {len(result.pages)} page(s)){suffix}"
+        )
         print(f"  methods: {result.method_counts()}")
         print(
             f"  tokens: {result.raw_tokens_est} -> {result.distilled_tokens_est}  "
             f"({result.compression_ratio:.1f}x compression)"
         )
+        if result.boilerplate:
+            collapsed = sum(e["occurrences"] for e in result.boilerplate)
+            print(f"  boilerplate: {len(result.boilerplate)} line(s) collapsed, {collapsed} occurrence(s)")
+        if handle is not None:
+            print(f"  handle: {handle}  (distill expand {handle})")
         for w in result.warnings:
             print(f"  warning: {w}")
 
     if args.out:
-        Path(args.out).write_text(result.text)
+        Path(args.out).write_text(result.rendered_text)
     return 0
 
 
@@ -92,12 +105,13 @@ def cmd_scan(args) -> int:
     ok = failed = 0
     for p in paths:
         try:
-            result = pipeline.distill(str(p), allow_vision=not args.no_vision)
+            result, _, cached = pipeline.distill(str(p), allow_vision=not args.no_vision)
             _log_run(result, trigger="cli")
             total_raw += result.raw_tokens_est
             total_distilled += result.distilled_tokens_est
             ok += 1
-            print(f"ok    {p}  {result.raw_tokens_est} -> {result.distilled_tokens_est}")
+            tag = " [cached]" if cached else ""
+            print(f"ok    {p}  {result.raw_tokens_est} -> {result.distilled_tokens_est}{tag}")
         except Exception as exc:
             failed += 1
             print(f"error {p}  {exc}", file=sys.stderr)
@@ -127,27 +141,59 @@ def cmd_hook_read(args) -> int:
     (.py, .md, etc.) pass through with negligible added latency."""
     payload = json.load(sys.stdin)
     file_path = payload.get("tool_input", {}).get("file_path", "")
+    session_id = payload.get("session_id")
     suffix = Path(file_path).suffix.lower()
 
     if suffix not in DISTILLABLE_EXTENSIONS:
         return 0  # pass through, no output, no heavy imports ever touched
 
-    from context_distill import pipeline
+    from context_distill import cache, pipeline
+    from context_distill.config import (
+        LARGE_DOC_HEAD_TOKENS,
+        LARGE_DOC_TOKEN_THRESHOLD,
+        REREAD_COLLAPSE_ENABLED,
+    )
+    from context_distill.tokens import estimate_text_tokens
 
     try:
-        result = pipeline.distill(file_path, allow_vision=not args.no_vision)
+        hash_value = cache.content_hash(file_path)
+        already_seen = REREAD_COLLAPSE_ENABLED and cache.seen_in_session(session_id, hash_value)
+        result, handle, was_cached = pipeline.distill(
+            file_path, allow_vision=not args.no_vision
+        )
     except Exception as exc:
         print(json.dumps({"warning": f"context-distill failed on {file_path}: {exc}"}))
         return 0  # fail open: let Claude Code's normal Read proceed
 
-    _log_run(result, trigger="hook")
+    if not was_cached:
+        _log_run(result, trigger="hook")
 
-    note = (
+    header = (
         f"[context-distill] {file_path}: {result.raw_tokens_est} -> "
         f"{result.distilled_tokens_est} tokens ({result.compression_ratio:.1f}x). "
         f"Methods: {result.method_counts()}."
     )
-    body = f"{note}\n\n{result.text}"
+    expand_hint = f"Full text: run `distill expand {handle}`." if handle is not None else ""
+
+    if already_seen:
+        body = (
+            f"{header}\n\nUnchanged since this session already read it, so the text is not "
+            f"repeated here. {expand_hint}"
+        )
+    else:
+        full = result.rendered_text
+        if estimate_text_tokens(full) > LARGE_DOC_TOKEN_THRESHOLD:
+            head = full[: int(LARGE_DOC_HEAD_TOKENS * 4)]
+            body = (
+                f"{header}\n\nLarge document — showing the first ~{LARGE_DOC_HEAD_TOKENS} "
+                f"tokens. Nothing was discarded: {expand_hint} "
+                f"Or search it with `distill index` + `distill query`.\n\n{head}\n\n"
+                f"[truncated here — {expand_hint}]"
+            )
+        else:
+            body = f"{header}\n\n{full}"
+
+    cache.mark_seen(session_id, hash_value)
 
     # Verified against Claude Code's current hook docs: hookSpecificOutput /
     # permissionDecision="deny" / permissionDecisionReason is the supported
@@ -160,6 +206,33 @@ def cmd_hook_read(args) -> int:
         }
     }
     print(json.dumps(output))
+    return 0
+
+
+def cmd_expand(args) -> int:
+    from context_distill import cache
+
+    if args.list:
+        entries = cache.list_entries(limit=args.limit)
+        if args.json:
+            print(json.dumps(entries, indent=2))
+        elif not entries:
+            print("nothing distilled yet")
+        else:
+            for e in entries:
+                print(f"{e['id']:>5}  {e['source_type']:<5}  {e['created_at'][:19]}  {e['source_path']}")
+        return 0
+
+    if args.handle is None:
+        print("give a handle, or --list", file=sys.stderr)
+        return 1
+
+    result = cache.get_by_id(args.handle)
+    if result is None:
+        print(f"no distillation with handle {args.handle}", file=sys.stderr)
+        return 1
+
+    print(result.rendered_text)
     return 0
 
 
@@ -316,8 +389,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_file.add_argument("--out")
     p_file.add_argument("--json", action="store_true")
     p_file.add_argument("--no-vision", action="store_true")
+    p_file.add_argument("--no-cache", action="store_true")
     p_file.add_argument("--no-save-log", action="store_true")
     p_file.set_defaults(func=cmd_file)
+
+    p_expand = sub.add_parser("expand", help="retrieve the full distilled text for a handle")
+    p_expand.add_argument("handle", nargs="?", type=int)
+    p_expand.add_argument("--list", action="store_true")
+    p_expand.add_argument("--limit", type=int, default=50)
+    p_expand.add_argument("--json", action="store_true")
+    p_expand.set_defaults(func=cmd_expand)
 
     p_scan = sub.add_parser("scan", help="batch distill a directory")
     p_scan.add_argument("dir")

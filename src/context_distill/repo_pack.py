@@ -93,11 +93,11 @@ def pack(
         suffix = path.suffix.lower()
         if suffix in DISTILLABLE_EXTENSIONS:
             try:
-                dist_result = pipeline.distill(str(path), allow_vision=allow_vision)
+                dist_result, _, _ = pipeline.distill(str(path), allow_vision=allow_vision)
                 result.files.append(
                     PackedFile(
                         path=rel_str,
-                        text=dist_result.text,
+                        text=dist_result.rendered_text,
                         tokens_est=dist_result.distilled_tokens_est,
                         distilled=True,
                     )

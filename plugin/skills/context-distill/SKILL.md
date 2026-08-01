@@ -16,6 +16,12 @@ plugin), Claude Code's `Read` tool is intercepted for `.pdf`, `.jpg`, `.jpeg`, `
 `.heic`, `.heif`, `.tiff`, `.tif`, `.bmp`, `.webp` files: instead of the raw file, the
 result is distilled text plus a token-savings note. No user action needed.
 
+Re-reading the same unchanged file later in a session returns a short pointer rather than
+repeating the text. That is a context optimization, not a loss — if the full text is
+actually needed again (for example after a compaction dropped it), run
+`distill expand <handle>` using the handle named in the pointer. Edited files are always
+re-distilled in full, so a pointer never refers to stale content.
+
 ## Manual commands
 
 - `distill file <path> [--json]` — distill one PDF/photo, print the result and a
@@ -30,6 +36,9 @@ result is distilled text plus a token-savings note. No user action needed.
 - `distill audit [path]` — structural CLAUDE.md/MEMORY.md audit (size, orphaned files,
   duplicate content), mode-aware.
 - `distill report` — cumulative token/savings report across all past runs.
+- `distill expand <handle>` — the full distilled text behind any handle. Whenever a
+  hook result says a document was collapsed, deferred, or truncated, this returns the
+  complete version. `--list` shows every handle available.
 
 ## Notes
 
