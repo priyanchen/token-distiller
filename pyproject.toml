@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "token-distiller"
 version = "0.1.0"
-description = "Distill PDFs, photos, and repos into token-efficient context for LLM agents, with local retrieval and activity-aware session auditing."
+description = "Distills PDFs, photos, and repos into token-efficient context for LLM agents. Local OCR with vision fallback, content-hash caching, re-read collapsing, and BM25 retrieval. Nothing is discarded — anything shortened expands back to full text. 33x measured on a 25-page PDF, 91% on screenshots. Pure Python, runs locally."
 readme = "README.md"
 license = "PolyForm-Noncommercial-1.0.0"
 authors = [

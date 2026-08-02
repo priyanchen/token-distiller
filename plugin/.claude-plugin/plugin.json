@@ -1,6 +1,6 @@
 {
   "name": "token-distiller",
-  "description": "Distills PDFs and photos into token-efficient text before they enter context, packs repos, indexes content for retrieval, and tracks session activity mode.",
+  "description": "Distills PDFs, photos, and repos into token-efficient context for LLM agents. Local OCR with vision fallback, content-hash caching, re-read collapsing, and BM25 retrieval. Nothing is discarded — anything shortened expands back to full text. 33x measured on a 25-page PDF, 91% on screenshots. Pure Python, runs locally.",
   "author": {
     "name": "Sri PriYa N. Chen"
   },
