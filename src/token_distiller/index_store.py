@@ -1,10 +1,11 @@
 import json
+import re
 from datetime import datetime, timezone
 
 from rank_bm25 import BM25Okapi
 
-from context_distill.storage import connect
-from context_distill.tokens import estimate_text_tokens
+from token_distiller.storage import connect
+from token_distiller.tokens import estimate_text_tokens
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS chunks (
@@ -88,8 +89,14 @@ def embeddings_for(chunk_ids: list[int]) -> dict[int, list[float]]:
         return {row["chunk_id"]: json.loads(row["vector"]) for row in rows}
 
 
+def tokenize(text: str) -> list[str]:
+    """Splitting on whitespace alone leaves punctuation attached, so a document ending
+    "...locking readers." never matches the query term "readers". Queries and documents
+    must run through this same function or scoring silently misses obvious hits."""
+    return re.findall(r"[a-z0-9]+", text.lower())
+
+
 def build_bm25(chunks: list[dict]):
     if not chunks:
         return None
-    tokenized = [c["text"].lower().split() for c in chunks]
-    return BM25Okapi(tokenized)
+    return BM25Okapi([tokenize(c["text"]) for c in chunks])

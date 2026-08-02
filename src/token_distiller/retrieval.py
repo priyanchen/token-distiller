@@ -1,5 +1,5 @@
-from context_distill import index_store
-from context_distill.config import DEFAULT_TOP_K
+from token_distiller import index_store
+from token_distiller.config import DEFAULT_TOP_K
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
@@ -17,7 +17,7 @@ def query(question: str, top_k: int = DEFAULT_TOP_K, use_semantic: bool = True) 
         return []
 
     bm25 = index_store.build_bm25(chunks)
-    bm25_scores = list(bm25.get_scores(question.lower().split()))
+    bm25_scores = list(bm25.get_scores(index_store.tokenize(question)))
     max_bm25 = max(bm25_scores) if bm25_scores else 0.0
 
     semantic_scores: dict[int, float] | None = None
@@ -25,7 +25,7 @@ def query(question: str, top_k: int = DEFAULT_TOP_K, use_semantic: bool = True) 
         cached = index_store.embeddings_for([c["id"] for c in chunks])
         if cached:
             try:
-                from context_distill import embeddings
+                from token_distiller import embeddings
 
                 query_vec = embeddings.embed_texts([question], input_type="query")[0]
                 semantic_scores = {

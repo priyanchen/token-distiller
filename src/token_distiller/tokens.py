@@ -8,7 +8,7 @@ billed for those pixels on top of its text, so scoring a text-native PDF as
 raw == distilled would report 1.0x on a file we in fact compress heavily.
 """
 
-from context_distill.config import (
+from token_distiller.config import (
     CHARS_PER_TOKEN,
     HOST_PDF_RENDER_DPI,
     IMAGE_MAX_EDGE_PX,

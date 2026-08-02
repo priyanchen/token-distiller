@@ -5,8 +5,8 @@ so it's instant and free. Feeds session_audit's mode-aware ordering."""
 from collections import Counter
 from datetime import datetime, timezone
 
-from context_distill.config import ACTIVITY_WINDOW_SIZE
-from context_distill.storage import connect
+from token_distiller.config import ACTIVITY_WINDOW_SIZE
+from token_distiller.storage import connect
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS activity_log (

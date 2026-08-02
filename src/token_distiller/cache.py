@@ -10,8 +10,8 @@ import hashlib
 import json
 from datetime import datetime, timezone
 
-from context_distill.models import DistillMethod, DistillResult, PageResult
-from context_distill.storage import connect
+from token_distiller.models import DistillMethod, DistillResult, PageResult
+from token_distiller.storage import connect
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS distillations (

@@ -8,7 +8,7 @@ import json
 import sys
 from pathlib import Path
 
-from context_distill.config import DISTILLABLE_EXTENSIONS
+from token_distiller.config import DISTILLABLE_EXTENSIONS
 
 
 def _result_to_dict(result) -> dict:
@@ -32,7 +32,7 @@ def _mean_ocr_confidence(result):
 
 
 def _log_run(result, trigger: str) -> None:
-    from context_distill import storage
+    from token_distiller import storage
 
     method_counts = result.method_counts()
     storage.insert_run(
@@ -58,7 +58,7 @@ def _log_run(result, trigger: str) -> None:
 
 
 def cmd_file(args) -> int:
-    from context_distill import pipeline
+    from token_distiller import pipeline
 
     result, handle, cached = pipeline.distill(
         args.path, allow_vision=not args.no_vision, use_cache=not args.no_cache
@@ -95,7 +95,7 @@ def cmd_file(args) -> int:
 
 
 def cmd_scan(args) -> int:
-    from context_distill import pipeline
+    from token_distiller import pipeline
 
     root = Path(args.dir)
     glob = root.rglob("*") if args.recursive else root.glob("*")
@@ -121,7 +121,7 @@ def cmd_scan(args) -> int:
 
 
 def cmd_report(args) -> int:
-    from context_distill import storage
+    from token_distiller import storage
 
     summary = storage.savings_summary(since=args.since)
     if args.json:
@@ -147,13 +147,13 @@ def cmd_hook_read(args) -> int:
     if suffix not in DISTILLABLE_EXTENSIONS:
         return 0  # pass through, no output, no heavy imports ever touched
 
-    from context_distill import cache, pipeline
-    from context_distill.config import (
+    from token_distiller import cache, pipeline
+    from token_distiller.config import (
         LARGE_DOC_HEAD_TOKENS,
         LARGE_DOC_TOKEN_THRESHOLD,
         REREAD_COLLAPSE_ENABLED,
     )
-    from context_distill.tokens import estimate_text_tokens
+    from token_distiller.tokens import estimate_text_tokens
 
     try:
         hash_value = cache.content_hash(file_path)
@@ -162,14 +162,14 @@ def cmd_hook_read(args) -> int:
             file_path, allow_vision=not args.no_vision
         )
     except Exception as exc:
-        print(json.dumps({"warning": f"context-distill failed on {file_path}: {exc}"}))
+        print(json.dumps({"warning": f"token-distiller failed on {file_path}: {exc}"}))
         return 0  # fail open: let Claude Code's normal Read proceed
 
     if not was_cached:
         _log_run(result, trigger="hook")
 
     header = (
-        f"[context-distill] {file_path}: {result.raw_tokens_est} -> "
+        f"[token-distiller] {file_path}: {result.raw_tokens_est} -> "
         f"{result.distilled_tokens_est} tokens ({result.compression_ratio:.1f}x). "
         f"Methods: {result.method_counts()}."
     )
@@ -210,7 +210,7 @@ def cmd_hook_read(args) -> int:
 
 
 def cmd_expand(args) -> int:
-    from context_distill import cache
+    from token_distiller import cache
 
     if args.list:
         entries = cache.list_entries(limit=args.limit)
@@ -237,7 +237,7 @@ def cmd_expand(args) -> int:
 
 
 def cmd_repo(args) -> int:
-    from context_distill import repo_pack
+    from token_distiller import repo_pack
 
     result = repo_pack.pack(
         args.dir, include=args.include, exclude=args.exclude, allow_vision=not args.no_vision
@@ -258,7 +258,7 @@ def cmd_repo(args) -> int:
 
 
 def cmd_index(args) -> int:
-    from context_distill import chunker, embeddings, index_store, repo_pack
+    from token_distiller import chunker, embeddings, index_store, repo_pack
 
     result = repo_pack.pack(args.dir, allow_vision=not args.no_vision)
     total_chunks = 0
@@ -289,7 +289,7 @@ def cmd_index(args) -> int:
 
 
 def cmd_query(args) -> int:
-    from context_distill import retrieval
+    from token_distiller import retrieval
 
     results = retrieval.query(args.question, top_k=args.top_k, use_semantic=not args.no_semantic)
 
@@ -314,7 +314,7 @@ def cmd_hook_activity(args) -> int:
     """Invoked by Claude Code's PostToolUse hook on every tool call. Records the
     call for activity-mode classification; never blocks or alters anything."""
     payload = json.load(sys.stdin)
-    from context_distill import activity
+    from token_distiller import activity
 
     activity.record(
         tool_name=payload.get("tool_name", ""),
@@ -325,7 +325,7 @@ def cmd_hook_activity(args) -> int:
 
 
 def cmd_mode(args) -> int:
-    from context_distill import activity
+    from token_distiller import activity
 
     result = activity.current_mode(session_id=args.session_id)
     if args.json:
@@ -339,7 +339,7 @@ def cmd_mode(args) -> int:
 
 
 def cmd_audit(args) -> int:
-    from context_distill import activity, session_audit
+    from token_distiller import activity, session_audit
 
     mode = activity.current_mode()["mode"]
     findings = session_audit.audit(args.path, memory_dir=args.memory_dir, mode=mode)
@@ -373,7 +373,7 @@ def cmd_audit(args) -> int:
 
 
 def cmd_install_hook(args) -> int:
-    from context_distill import hook_installer
+    from token_distiller import hook_installer
 
     target_path = hook_installer.resolve_target(args.target, args.project_dir)
     print(hook_installer.install(target_path, dry_run=args.dry_run))

@@ -2,7 +2,7 @@ import pdfplumber
 from pdf2image import convert_from_path
 from PIL import Image
 
-from context_distill.config import MIN_NATIVE_TEXT_CHARS, RENDER_DPI
+from token_distiller.config import MIN_NATIVE_TEXT_CHARS, RENDER_DPI
 
 
 def extract_native_pages(pdf_path: str) -> list[str]:

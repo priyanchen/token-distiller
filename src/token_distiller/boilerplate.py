@@ -10,7 +10,7 @@ transformation is auditable and nothing becomes unknowable.
 
 from collections import Counter
 
-from context_distill.config import (
+from token_distiller.config import (
     BOILERPLATE_MAX_LINE_CHARS,
     BOILERPLATE_MIN_PAGES,
     BOILERPLATE_PAGE_FRACTION,
@@ -61,7 +61,7 @@ def strip_boilerplate(page_texts: list[str]) -> tuple[list[str], list[dict]]:
 def render_manifest(manifest: list[dict]) -> str:
     if not manifest:
         return ""
-    parts = ["[context-distill] repeated on every page, listed once instead of inline:"]
+    parts = ["[token-distiller] repeated on every page, listed once instead of inline:"]
     for entry in manifest:
         parts.append(f"  ({entry['occurrences']}x) {entry['line']}")
     return "\n".join(parts)

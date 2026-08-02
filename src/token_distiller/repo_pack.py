@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pathspec
 
-from context_distill.config import DISTILLABLE_EXTENSIONS
-from context_distill.tokens import estimate_text_tokens
+from token_distiller.config import DISTILLABLE_EXTENSIONS
+from token_distiller.tokens import estimate_text_tokens
 
 DEFAULT_EXCLUDES = [
     ".git/",
@@ -72,7 +72,7 @@ def pack(
     exclude: str | None = None,
     allow_vision: bool = True,
 ) -> PackResult:
-    from context_distill import pipeline  # lazy: only needed once a PDF/image shows up
+    from token_distiller import pipeline  # lazy: only needed once a PDF/image shows up
 
     root = Path(root_dir).resolve()
     spec = _load_spec(root)

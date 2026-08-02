@@ -1,6 +1,6 @@
 import os
 
-from context_distill.config import VOYAGE_API_KEY_ENV
+from token_distiller.config import VOYAGE_API_KEY_ENV
 
 VOYAGE_MODEL = "voyage-3"
 

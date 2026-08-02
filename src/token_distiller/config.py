@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-HOME = Path(os.environ.get("CONTEXT_DISTILL_HOME", Path.home() / ".context-distill"))
+HOME = Path(os.environ.get("TOKEN_DISTILLER_HOME", Path.home() / ".token-distiller"))
 DB_PATH = HOME / "distill.db"
 
 # --- M1: distillation thresholds ---
@@ -12,7 +12,7 @@ OCR_CONF_THRESHOLD = 70.0  # mean Tesseract word confidence (0-100)
 OCR_MIN_WORD_COUNT = 5
 RENDER_DPI = 200  # rasterization DPI for text-less PDF pages
 
-VISION_MODEL = os.environ.get("CONTEXT_DISTILL_VISION_MODEL", "claude-sonnet-5")
+VISION_MODEL = os.environ.get("TOKEN_DISTILLER_VISION_MODEL", "claude-sonnet-5")
 VISION_PROMPT = (
     "Transcribe all readable text from this image verbatim. If it contains a "
     "chart, diagram, or figure with no transcribable text, describe its content "
@@ -40,10 +40,10 @@ DEFAULT_TOP_K = 5
 ACTIVITY_WINDOW_SIZE = 10
 
 # --- M5: cache, boilerplate, large-document handling ---
-CACHE_ENABLED = os.environ.get("CONTEXT_DISTILL_CACHE", "1") != "0"
+CACHE_ENABLED = os.environ.get("TOKEN_DISTILLER_CACHE", "1") != "0"
 # Re-reading an unchanged file in the same session returns a pointer instead of the
 # full text. The text is never discarded — `distill expand <handle>` returns it.
-REREAD_COLLAPSE_ENABLED = os.environ.get("CONTEXT_DISTILL_REREAD_COLLAPSE", "1") != "0"
+REREAD_COLLAPSE_ENABLED = os.environ.get("TOKEN_DISTILLER_REREAD_COLLAPSE", "1") != "0"
 
 # A line must appear on at least this fraction of pages to count as boilerplate.
 # Deliberately high: at 0.8 a 25-page deck's copyright footer (25/25) collapses while a
@@ -51,11 +51,11 @@ REREAD_COLLAPSE_ENABLED = os.environ.get("CONTEXT_DISTILL_REREAD_COLLAPSE", "1")
 BOILERPLATE_PAGE_FRACTION = 0.8
 BOILERPLATE_MIN_PAGES = 3
 BOILERPLATE_MAX_LINE_CHARS = 120
-BOILERPLATE_ENABLED = os.environ.get("CONTEXT_DISTILL_BOILERPLATE", "1") != "0"
+BOILERPLATE_ENABLED = os.environ.get("TOKEN_DISTILLER_BOILERPLATE", "1") != "0"
 
 # Beyond this, the hook returns an outline + head + expand handle rather than the whole
 # document. Deferred, not dropped: the full text stays retrievable via `distill expand`.
-LARGE_DOC_TOKEN_THRESHOLD = int(os.environ.get("CONTEXT_DISTILL_LARGE_DOC_TOKENS", "8000"))
+LARGE_DOC_TOKEN_THRESHOLD = int(os.environ.get("TOKEN_DISTILLER_LARGE_DOC_TOKENS", "8000"))
 LARGE_DOC_HEAD_TOKENS = 1500
 
 # Anthropic downscales images whose long edge exceeds this before billing.

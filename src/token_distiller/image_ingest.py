@@ -3,7 +3,7 @@ from pathlib import Path
 import pillow_heif
 from PIL import Image
 
-from context_distill.config import IMAGE_EXTENSIONS
+from token_distiller.config import IMAGE_EXTENSIONS
 
 pillow_heif.register_heif_opener()
 

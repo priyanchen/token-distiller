@@ -1,11 +1,11 @@
 {
-  "name": "context-distill",
+  "name": "token-distiller",
   "description": "Distills PDFs and photos into token-efficient text before they enter context, packs repos, indexes content for retrieval, and tracks session activity mode.",
   "author": {
     "name": "Sri PriYa N. Chen"
   },
-  "homepage": "https://github.com/priyachen/context-distill",
-  "repository": "https://github.com/priyachen/context-distill",
+  "homepage": "https://github.com/priyachen/token-distiller",
+  "repository": "https://github.com/priyachen/token-distiller",
   "version": "0.1.0",
   "license": "PolyForm-Noncommercial-1.0.0",
   "keywords": ["token", "context", "pdf", "ocr", "retrieval", "rag"]

@@ -1,4 +1,4 @@
-# context-distill
+# Token Distiller
 
 Distills PDFs and photos into token-efficient text before they enter an LLM's context, packs repos Repomix-style, indexes ingested content for retrieval instead of raw dumping, and tracks session activity mode to bias what a context audit flags.
 
@@ -14,9 +14,9 @@ pip install .
 ```
 
 Use a regular install, not `pip install -e .`. On this machine the editable install's
-`_editable_impl_context_distill.pth` was silently ignored by `site.py` (the file was
+`_editable_impl_token_distiller.pth` was silently ignored by `site.py` (the file was
 readable and its contents correct, and a byte-identical copy under a different filename
-*was* honored — root cause unresolved), leaving `context_distill` unimportable. A regular
+*was* honored — root cause unresolved), leaving `token_distiller` unimportable. A regular
 install copies the package into `site-packages` and avoids the `.pth` indirection
 entirely. Re-run `pip install .` after editing source.
 
@@ -51,12 +51,12 @@ shortening happens. Anything the hook shortens carries a handle, and `distill ex
   qualify, so a running copyright footer (25/25 pages) collapses while a structural
   marker like `Example:` (15/25) is left alone. Collapsed lines are listed at the top of
   the output.
-- **Large documents defer rather than truncate.** Past `CONTEXT_DISTILL_LARGE_DOC_TOKENS`
+- **Large documents defer rather than truncate.** Past `TOKEN_DISTILLER_LARGE_DOC_TOKENS`
   (default 8000) the hook returns a head plus retrieval instructions. Nothing is
   discarded — `distill expand` or `distill index` + `distill query` reach the rest.
 
-Toggle any of it off: `CONTEXT_DISTILL_CACHE=0`, `CONTEXT_DISTILL_REREAD_COLLAPSE=0`,
-`CONTEXT_DISTILL_BOILERPLATE=0`.
+Toggle any of it off: `TOKEN_DISTILLER_CACHE=0`, `TOKEN_DISTILLER_REREAD_COLLAPSE=0`,
+`TOKEN_DISTILLER_BOILERPLATE=0`.
 
 ## A note on the numbers
 

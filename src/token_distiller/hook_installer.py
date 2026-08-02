@@ -7,9 +7,12 @@ import shutil
 import sys
 from pathlib import Path
 
-from context_distill.config import DISTILLABLE_EXTENSIONS
+from token_distiller.config import DISTILLABLE_EXTENSIONS
 
-_MARKER = "distill hook-read"
+# Matched against the command string already written into settings.json. It must not
+# include the binary path, which is quoted ("...\bin/distill" hook-read) and varies per
+# install — searching for "distill hook-read" never matches and duplicates the hook.
+_MARKER = "hook-read"
 
 
 def _distill_binary_path() -> str:

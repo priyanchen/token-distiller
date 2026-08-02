@@ -1,7 +1,7 @@
 import time
 from pathlib import Path
 
-from context_distill import (
+from token_distiller import (
     boilerplate as boilerplate_mod,
     cache,
     image_ingest,
@@ -9,15 +9,15 @@ from context_distill import (
     pdf_extract,
     vision_fallback,
 )
-from context_distill.config import (
+from token_distiller.config import (
     BOILERPLATE_ENABLED,
     CACHE_ENABLED,
     OCR_CONF_THRESHOLD,
     OCR_MIN_WORD_COUNT,
     PDF_EXTENSIONS,
 )
-from context_distill.models import DistillMethod, DistillResult, PageResult
-from context_distill.tokens import (
+from token_distiller.models import DistillMethod, DistillResult, PageResult
+from token_distiller.tokens import (
     estimate_image_tokens,
     estimate_pdf_page_host_tokens,
     estimate_text_tokens,

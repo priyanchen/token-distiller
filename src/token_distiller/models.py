@@ -39,9 +39,9 @@ class DistillResult:
 
     @property
     def compression_ratio(self) -> float:
-        if self.distilled_tokens_est == 0:
-            return 0.0
-        return self.raw_tokens_est / self.distilled_tokens_est
+        # A page that distilled to nothing (a photo with no readable text) compressed
+        # completely; reporting 0.0 there would read as "no compression at all".
+        return self.raw_tokens_est / max(1, self.distilled_tokens_est)
 
     @property
     def text(self) -> str:
@@ -53,7 +53,7 @@ class DistillResult:
         front rather than silently dropped."""
         if not self.boilerplate:
             return self.text
-        from context_distill.boilerplate import render_manifest
+        from token_distiller.boilerplate import render_manifest
 
         return f"{render_manifest(self.boilerplate)}\n\n{self.text}"
 

@@ -2,7 +2,7 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
-from context_distill.config import DB_PATH, ensure_home
+from token_distiller.config import DB_PATH, ensure_home
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (

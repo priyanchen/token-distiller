@@ -4,7 +4,7 @@ import os
 
 from PIL import Image
 
-from context_distill.config import ANTHROPIC_API_KEY_ENV, VISION_MODEL, VISION_PROMPT
+from token_distiller.config import ANTHROPIC_API_KEY_ENV, VISION_MODEL, VISION_PROMPT
 
 
 class VisionUnavailable(Exception):

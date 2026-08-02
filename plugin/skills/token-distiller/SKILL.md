@@ -1,13 +1,13 @@
 ---
-name: context-distill
+name: token-distiller
 description: Distill PDFs and photos into token-efficient text, pack repos Repomix-style, index content for retrieval, and check session activity mode. Use when the user wants to load a large PDF/photo/repo into context efficiently, or asks about token savings for documents.
 ---
 
-# context-distill
+# Token Distiller
 
-A local, open-source pipeline (Python, MIT license) that keeps large PDFs, photos, and
-codebases from bloating context. All commands run through the `distill` CLI, installed
-in this plugin's bundled virtualenv.
+A local, open-source pipeline (Python) that keeps large PDFs, photos, and codebases from
+bloating context. All commands run through the `distill` CLI, installed in this plugin's
+bundled virtualenv.
 
 ## When Read intercepts a PDF/photo automatically
 

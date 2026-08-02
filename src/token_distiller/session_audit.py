@@ -6,7 +6,7 @@ import hashlib
 import re
 from pathlib import Path
 
-from context_distill.tokens import estimate_text_tokens
+from token_distiller.tokens import estimate_text_tokens
 
 
 def _normalize(paragraph: str) -> str:
