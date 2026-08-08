@@ -1,0 +1,18 @@
+{
+  "name": "token-distiller",
+  "owner": {
+    "name": "Sri PriYa N. Chen",
+    "email": "p.chen@NeoclassicalPopArt.com",
+    "url": "https://github.com/priyanchen/token-distiller"
+  },
+  "plugins": [
+    {
+      "name": "token-distiller",
+      "source": "./plugin",
+      "description": "Distills PDFs, photos, and repos into token-efficient context for LLM agents. Local OCR reads embedded diagrams, not just text layers; content-hash caching collapses re-reads; BM25 retrieval bounds huge documents. Nothing is discarded — anything shortened expands back in full. 33x on a 25-page PDF, 97% on pytest output.",
+      "version": "0.1.0",
+      "license": "PolyForm-Noncommercial-1.0.0",
+      "keywords": ["token", "context", "pdf", "ocr", "retrieval", "rag"]
+    }
+  ]
+}
