@@ -20,7 +20,14 @@ readable and its contents correct, and a byte-identical copy under a different f
 install copies the package into `site-packages` and avoids the `.pth` indirection
 entirely. Re-run `pip install .` after editing source.
 
-Optional: set `ANTHROPIC_API_KEY` to enable vision-model fallback for low-confidence OCR pages. Set `VOYAGE_API_KEY` and `pip install ".[rag-semantic]"` to enable semantic (embedding) retrieval on top of the default BM25 keyword index.
+Optional: set **`TOKEN_DISTILLER_ANTHROPIC_API_KEY`** to enable vision-model fallback for
+figures and pages OCR can't read. Prefer that name over plain `ANTHROPIC_API_KEY` — a host
+agent (Claude Code included) may also read `ANTHROPIC_API_KEY` and switch from subscription
+authentication to per-token API billing if it finds one. The scoped name is checked first,
+so this tool gets a key without changing anyone else's auth.
+
+Set `VOYAGE_API_KEY` and `pip install ".[rag-semantic]"` to enable semantic (embedding)
+retrieval on top of the default BM25 keyword index.
 
 ## CLI
 
@@ -114,7 +121,7 @@ Two features are opt-in, and they send different things to different companies:
 
 | Enabled by | Goes to | What is sent |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Anthropic | A PNG of a **single cropped figure**, plus a fixed prompt. No source code, no file paths, no surrounding page text. |
+| `TOKEN_DISTILLER_ANTHROPIC_API_KEY` (or `ANTHROPIC_API_KEY`) | Anthropic | A PNG of a **single cropped figure**, plus a fixed prompt. No source code, no file paths, no surrounding page text. |
 | `VOYAGE_API_KEY` + `pip install ".[rag-semantic]"` | Voyage AI | **Chunk text** from whatever you indexed. If you indexed a repo pack, that includes your source code. |
 
 The Voyage path is the one to think hardest about — it is a separate company under separate

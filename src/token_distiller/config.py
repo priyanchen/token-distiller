@@ -37,6 +37,10 @@ PDF_EXTENSIONS = {".pdf"}
 DISTILLABLE_EXTENSIONS = IMAGE_EXTENSIONS | PDF_EXTENSIONS
 
 ANTHROPIC_API_KEY_ENV = "ANTHROPIC_API_KEY"
+# Checked first, so this tool can be given a key without exporting ANTHROPIC_API_KEY
+# globally. That matters because the host agent may also read ANTHROPIC_API_KEY and
+# switch from subscription auth to per-token API billing if it finds one.
+SCOPED_API_KEY_ENV = "TOKEN_DISTILLER_ANTHROPIC_API_KEY"
 VOYAGE_API_KEY_ENV = "VOYAGE_API_KEY"
 
 # --- M3: retrieval ---

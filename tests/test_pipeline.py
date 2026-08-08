@@ -262,3 +262,44 @@ def test_otsu_threshold_handles_empty_histogram():
     from token_distiller.ocr import _otsu_threshold
 
     assert _otsu_threshold([0] * 256) == 128
+
+
+def test_scoped_api_key_takes_precedence(monkeypatch):
+    """The tool-specific variable must win, so enabling vision here cannot change how the
+    host agent authenticates."""
+    from token_distiller import vision_fallback
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "global-key")
+    monkeypatch.setenv("TOKEN_DISTILLER_ANTHROPIC_API_KEY", "scoped-key")
+    assert vision_fallback.resolve_api_key() == "scoped-key"
+
+
+def test_falls_back_to_the_standard_api_key(monkeypatch):
+    from token_distiller import vision_fallback
+
+    monkeypatch.delenv("TOKEN_DISTILLER_ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "global-key")
+    assert vision_fallback.resolve_api_key() == "global-key"
+
+
+def test_no_key_at_all_resolves_to_none(monkeypatch):
+    from token_distiller import vision_fallback
+
+    monkeypatch.delenv("TOKEN_DISTILLER_ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert vision_fallback.resolve_api_key() is None
+
+
+def test_missing_key_names_both_variables(monkeypatch):
+    """The error is the only place a user learns which variable to set."""
+    from PIL import Image
+    from token_distiller import vision_fallback
+
+    monkeypatch.delenv("TOKEN_DISTILLER_ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    try:
+        vision_fallback.describe_image(Image.new("RGB", (10, 10), "white"))
+    except vision_fallback.VisionUnavailable as exc:
+        assert "TOKEN_DISTILLER_ANTHROPIC_API_KEY" in str(exc)
+    else:
+        raise AssertionError("expected VisionUnavailable")
