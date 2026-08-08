@@ -6,7 +6,7 @@
   },
   "homepage": "https://github.com/priyanchen/token-distiller",
   "repository": "https://github.com/priyanchen/token-distiller",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "PolyForm-Noncommercial-1.0.0",
   "keywords": ["token", "context", "pdf", "ocr", "retrieval", "rag"]
 }
