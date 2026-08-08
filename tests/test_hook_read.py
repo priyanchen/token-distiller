@@ -128,3 +128,39 @@ def test_hook_read_omits_the_note_when_no_pages_have_images(monkeypatch, capsys,
     _, out = _run_hook(monkeypatch, capsys, path)
     reason = _reason(out)
     assert "embedded image" not in reason
+
+
+def _run_hook_with(monkeypatch, capsys, tool_input, session_id="S1"):
+    payload = {"session_id": session_id, "tool_input": tool_input}
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+    code = cli.cmd_hook_read(Namespace(no_vision=True))
+    return code, capsys.readouterr().out
+
+
+def test_page_ranged_read_passes_through(monkeypatch, capsys, pdf_factory):
+    """A request for specific pages must not be answered with the whole document. Before
+    this, hook-read ignored the range entirely and returned the full distilled text."""
+    path = pdf_factory([[f"page {i} with enough text to stay on the native path"] for i in range(6)])
+    code, out = _run_hook_with(monkeypatch, capsys, {"file_path": path, "pages": "2-4"})
+    assert code == 0
+    assert out == ""
+
+
+def test_offset_read_passes_through(monkeypatch, capsys, pdf_factory):
+    path = pdf_factory([["some page content that is comfortably long enough here"]])
+    code, out = _run_hook_with(monkeypatch, capsys, {"file_path": path, "offset": 100})
+    assert code == 0
+    assert out == ""
+
+
+def test_limit_read_passes_through(monkeypatch, capsys, pdf_factory):
+    path = pdf_factory([["some page content that is comfortably long enough here"]])
+    code, out = _run_hook_with(monkeypatch, capsys, {"file_path": path, "limit": 50})
+    assert code == 0
+    assert out == ""
+
+
+def test_whole_file_read_is_still_intercepted(monkeypatch, capsys, pdf_factory):
+    path = pdf_factory([["ordinary whole-file read of a page with plenty of text"]])
+    _, out = _run_hook_with(monkeypatch, capsys, {"file_path": path})
+    assert "hookSpecificOutput" in out

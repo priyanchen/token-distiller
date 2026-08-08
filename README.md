@@ -62,14 +62,47 @@ shortening happens. Anything the hook shortens carries a handle, and `distill ex
   already captured losslessly, so including it would pay vision tokens to re-read text
   we already have. Hairline rules and background strips are skipped via
   `TOKEN_DISTILLER_FIGURE_MIN_SIDE_PT` (default 48pt). `--no-figures` turns it off.
+- **A weak OCR pass is retried on a preprocessed copy.** Figures cropped from a PDF are
+  often below the ~300 DPI Tesseract expects and sit on a tinted panel, which is exactly
+  when raw OCR returns nothing. A second attempt greyscales, stretches contrast, upscales
+  small crops, and binarizes with an Otsu threshold. It is a retry rather than the default
+  because binarizing can destroy anti-aliased text that read fine raw, so the preprocessed
+  pass has to win on word count and confidence to be used. Measured on a real 765-page
+  book: of 13 figures that raw OCR could not read at all, **10 were recovered** — one at
+  confidence 96, transcribing `Market Research / Competitive Analysis / SWOT Analysis /
+  Goal Setting / Resource Allocation`. That book ends at 60 of 63 figures read, with no
+  API key.
 - **Figures that still can't be read are flagged, never dropped silently.** A purely
   graphical diagram with no legible labels yields nothing from OCR, and without
   `ANTHROPIC_API_KEY` there's no vision fallback to describe it. Those pages stay in
   `pages_with_uncaptured_images()` and surface as one compact note — never one line per
-  page — in `distill file`, `--json`, and the hook-read response. Measured on a real
-  765-page book: of two diagram pages, one transcribed to `The Mission / The Market /
-  The Competition / The Leader / The Operations` from OCR alone, the other reported as
-  unreadable rather than quietly omitted. Set `ANTHROPIC_API_KEY` to close that gap.
+  page — in `distill file`, `--json`, and the hook-read response. Set `ANTHROPIC_API_KEY`
+  to close the remainder.
+
+## What leaves your machine
+
+With no API keys set, nothing does. OCR runs locally through Tesseract and retrieval runs
+locally through BM25, so the default configuration makes **zero network calls**.
+
+Two features are opt-in, and they send different things to different companies:
+
+| Enabled by | Goes to | What is sent |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Anthropic | A PNG of a **single cropped figure**, plus a fixed prompt. No source code, no file paths, no surrounding page text. |
+| `VOYAGE_API_KEY` + `pip install ".[rag-semantic]"` | Voyage AI | **Chunk text** from whatever you indexed. If you indexed a repo pack, that includes your source code. |
+
+The Voyage path is the one to think hardest about — it is a separate company under separate
+terms, and it is the only path that can transmit code. It is off unless you both install the
+extra and set the key; BM25 retrieval works without it.
+
+On the Anthropic path, [their commercial terms](https://www.anthropic.com/legal/commercial-terms)
+state that the customer "retains all rights to its Inputs", "owns its Outputs", that
+Anthropic "disclaims any rights it receives to the Customer Content", and that Anthropic
+"may not train models on Customer Content from Services". Read them yourself rather than
+relying on this summary; this is not legal advice.
+
+Turn figure reading off entirely with `--no-figures` or
+`TOKEN_DISTILLER_DESCRIBE_FIGURES=0`, and it will never reach for the vision model.
 
 Toggle any of it off: `TOKEN_DISTILLER_CACHE=0`, `TOKEN_DISTILLER_REREAD_COLLAPSE=0`,
 `TOKEN_DISTILLER_BOILERPLATE=0`.

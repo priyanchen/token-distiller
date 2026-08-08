@@ -182,12 +182,19 @@ def cmd_hook_read(args) -> int:
     check below must stay dependency-free so the overwhelming majority of calls
     (.py, .md, etc.) pass through with negligible added latency."""
     payload = json.load(sys.stdin)
-    file_path = payload.get("tool_input", {}).get("file_path", "")
+    tool_input = payload.get("tool_input", {}) or {}
+    file_path = tool_input.get("file_path", "")
     session_id = payload.get("session_id")
     suffix = Path(file_path).suffix.lower()
 
     if suffix not in DISTILLABLE_EXTENSIONS:
         return 0  # pass through, no output, no heavy imports ever touched
+
+    # A ranged read asks for a specific slice; distillation is whole-file, so answering
+    # with the whole document (or its head) would silently return the wrong content.
+    # Pass through and let the native ranged read do its job.
+    if any(tool_input.get(k) is not None for k in ("pages", "offset", "limit")):
+        return 0
 
     from token_distiller import cache, pipeline
     from token_distiller.config import (
@@ -424,7 +431,11 @@ def cmd_install_hook(args) -> int:
     from token_distiller import hook_installer
 
     target_path = hook_installer.resolve_target(args.target, args.project_dir)
-    print(hook_installer.install(target_path, dry_run=args.dry_run))
+    print(
+        hook_installer.install(
+            target_path, dry_run=args.dry_run, include_images=args.images
+        )
+    )
     return 0
 
 
@@ -510,6 +521,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_install.add_argument("--target", choices=["project", "global"], default="project")
     p_install.add_argument("--project-dir")
     p_install.add_argument("--dry-run", action="store_true")
+    p_install.add_argument(
+        "--images",
+        action="store_true",
+        help="also intercept image reads (loses the model's own vision on them)",
+    )
     p_install.set_defaults(func=cmd_install_hook)
 
     return parser

@@ -7,7 +7,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from token_distiller.config import DISTILLABLE_EXTENSIONS
+from token_distiller.config import DISTILLABLE_EXTENSIONS, PDF_EXTENSIONS
 
 # Matched against the command string already written into settings.json. It must not
 # include the binary path, which is quoted ("...\bin/distill" hook-read) and varies per
@@ -19,9 +19,9 @@ def _distill_binary_path() -> str:
     return str(Path(sys.executable).parent / "distill")
 
 
-def _build_hook_entries(command: str) -> list[dict]:
+def _build_hook_entries(command: str, extensions: set[str] | None = None) -> list[dict]:
     entries = []
-    for ext in sorted(DISTILLABLE_EXTENSIONS):
+    for ext in sorted(extensions if extensions is not None else PDF_EXTENSIONS):
         pattern = ext.lstrip(".")
         entries.append(
             {
@@ -49,7 +49,16 @@ def resolve_target(target: str, project_dir: str | None) -> Path:
     return root / ".claude" / "settings.json"
 
 
-def install(target_path: Path, dry_run: bool = False) -> str:
+def install(target_path: Path, dry_run: bool = False, include_images: bool = False) -> str:
+    """PDFs only by default.
+
+    Intercepting an image read is a downgrade, not a saving: reading a screenshot natively
+    gives the model actual vision on it, while this hook would substitute OCR text and
+    discard everything the picture conveys that isn't a word. PDFs are the opposite case —
+    the text layer is extracted losslessly, embedded figures are read separately, and the
+    saving is enormous. include_images=True opts in anyway.
+    """
+    extensions = DISTILLABLE_EXTENSIONS if include_images else PDF_EXTENSIONS
     settings: dict = {}
     if target_path.exists():
         settings = json.loads(target_path.read_text())
@@ -61,7 +70,9 @@ def install(target_path: Path, dry_run: bool = False) -> str:
         return f"already installed in {target_path}, no changes made"
 
     command = f'"{_distill_binary_path()}" hook-read'
-    pretooluse.append({"matcher": "Read", "hooks": _build_hook_entries(command)})
+    pretooluse.append(
+        {"matcher": "Read", "hooks": _build_hook_entries(command, extensions)}
+    )
 
     rendered = json.dumps(settings, indent=2) + "\n"
 

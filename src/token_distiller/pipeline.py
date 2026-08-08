@@ -14,6 +14,7 @@ from token_distiller.config import (
     CACHE_ENABLED,
     DESCRIBE_FIGURES,
     FIGURE_PROMPT,
+    FIGURE_RENDER_DPI,
     OCR_CONF_THRESHOLD,
     OCR_MIN_WORD_COUNT,
     PDF_EXTENSIONS,
@@ -27,7 +28,7 @@ from token_distiller.tokens import (
 
 
 def _distill_ocr_or_vision(page_index: int, image, allow_vision: bool = True) -> PageResult:
-    text, mean_conf, word_count = ocr_mod.ocr_image(image)
+    text, mean_conf, word_count = ocr_mod.ocr_image_best(image)
     raw_tokens = estimate_image_tokens(*image.size)
     needs_fallback = mean_conf < OCR_CONF_THRESHOLD or word_count < OCR_MIN_WORD_COUNT
 
@@ -95,14 +96,20 @@ def _read_figures(
     scanned pages. Failures are skipped rather than raised: a figure we cannot read leaves
     the page flagged as uncaptured, which is the honest outcome, and must never take down
     the extraction of the page's text."""
+    try:
+        # rendered once per page, not once per figure
+        page_image = pdf_extract.rasterize_page(path, page_index, dpi=FIGURE_RENDER_DPI)
+    except Exception:
+        return []
+
     recovered: list[str] = []
     for bbox in boxes:
         try:
-            crop = pdf_extract.rasterize_region(path, page_index, bbox, page_height_pt)
+            crop = pdf_extract.crop_region(page_image, bbox, page_height_pt)
         except Exception:
             continue
 
-        text, mean_conf, word_count = ocr_mod.ocr_image(crop)
+        text, mean_conf, word_count = ocr_mod.ocr_image_best(crop)
         if mean_conf < OCR_CONF_THRESHOLD or word_count < OCR_MIN_WORD_COUNT:
             if allow_vision:
                 try:

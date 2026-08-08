@@ -10,6 +10,14 @@ DB_PATH = HOME / "distill.db"
 MIN_NATIVE_TEXT_CHARS = 20  # below this, treat a PDF page as image-only
 OCR_CONF_THRESHOLD = 70.0  # mean Tesseract word confidence (0-100)
 OCR_MIN_WORD_COUNT = 5
+
+# A raw OCR pass this weak earns a second attempt on a preprocessed copy. Set high enough
+# that anything already reading cleanly skips the retry entirely.
+OCR_RETRY_CONF_THRESHOLD = 80.0
+OCR_RETRY_MIN_WORDS = 3
+# Tesseract wants roughly 300-DPI text; crops smaller than this get scaled up first.
+OCR_MIN_UPSCALE_PX = 600
+OCR_UPSCALE_FACTOR = 2
 RENDER_DPI = 200  # rasterization DPI for text-less PDF pages
 
 VISION_MODEL = os.environ.get("TOKEN_DISTILLER_VISION_MODEL", "claude-sonnet-5")

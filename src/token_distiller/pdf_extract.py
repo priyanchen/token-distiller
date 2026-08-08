@@ -68,14 +68,13 @@ def rasterize_page(pdf_path: str, page_index: int, dpi: int = RENDER_DPI) -> Ima
     return images[0]
 
 
-def rasterize_region(
-    pdf_path: str,
-    page_index: int,
+def crop_region(
+    page: Image.Image,
     bbox_pt: tuple[float, float, float, float],
     page_height_pt: float,
     dpi: int = FIGURE_RENDER_DPI,
 ) -> Image.Image:
-    """Render one figure, not the whole page.
+    """Cut one figure out of an already-rendered page.
 
     Cropping matters for both cost and quality: the surrounding body text is already
     captured losslessly by native extraction, so including it would pay vision tokens to
@@ -83,7 +82,6 @@ def rasterize_region(
     PDF y-coordinates grow upward from the bottom-left while PIL's grow downward from the
     top-left, so the vertical axis is flipped here.
     """
-    page = rasterize_page(pdf_path, page_index, dpi=dpi)
     scale = dpi / PDF_POINTS_PER_INCH
     x0, y0, x1, y1 = bbox_pt
     left = max(0, int(x0 * scale))
@@ -93,3 +91,17 @@ def rasterize_region(
     if right <= left or bottom <= top:
         return page
     return page.crop((left, top, right, bottom))
+
+
+def rasterize_region(
+    pdf_path: str,
+    page_index: int,
+    bbox_pt: tuple[float, float, float, float],
+    page_height_pt: float,
+    dpi: int = FIGURE_RENDER_DPI,
+) -> Image.Image:
+    """Render a page and return one figure from it. Callers handling several figures on the
+    same page should render once with rasterize_page and use crop_region instead — this
+    convenience wrapper re-renders per call."""
+    page = rasterize_page(pdf_path, page_index, dpi=dpi)
+    return crop_region(page, bbox_pt, page_height_pt, dpi=dpi)

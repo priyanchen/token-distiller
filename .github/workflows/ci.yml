@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # poppler backs pdf2image's page rasterization; tesseract is the OCR engine; the
+      # DejaVu fonts are needed by the fixtures that render real text for OCR to read.
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils tesseract-ocr fonts-dejavu-core
+
+      - name: Install package
+        run: pip install ".[dev]"
+
+      - name: Verify OCR engine is reachable
+        run: python -c "import pytesseract; print(pytesseract.get_tesseract_version())"
+
+      - name: Default suite
+        run: pytest -q
+
+      # Deselected by default because they drive real Tesseract; run explicitly here so the
+      # compression claims in the README and the figure-reading path stay covered.
+      - name: OCR-marked suite
+        run: pytest -q -m ocr
+
+      - name: Smoke-test the CLI end to end
+        run: |
+          distill --help
+          python - <<'PY'
+          import subprocess, sys
+          sys.path.insert(0, "tests")
+          from conftest import make_pdf
+          make_pdf("/tmp/ci_smoke.pdf", [["A page of native text long enough to skip OCR entirely."]])
+          out = subprocess.run(
+              ["distill", "file", "/tmp/ci_smoke.pdf", "--json"],
+              capture_output=True, text=True, check=True,
+          ).stdout
+          import json
+          d = json.loads(out)
+          assert d["method_counts"] == {"native_text": 1}, d["method_counts"]
+          assert d["compression_ratio"] > 1.0, d["compression_ratio"]
+          print("CLI smoke test OK:", d["raw_tokens_est"], "->", d["distilled_tokens_est"])
+          PY

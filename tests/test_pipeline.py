@@ -229,3 +229,36 @@ def test_no_figures_flag_leaves_the_page_flagged(tmp_path):
     assert result.pages[0].figures == []
     assert result.pages_with_uncaptured_images() == [0]
     assert "SHOULD NOT BE TRANSCRIBED" not in result.text
+
+
+def test_preprocess_produces_a_binary_image():
+    from PIL import Image
+    from token_distiller import ocr
+
+    noisy = Image.new("RGB", (120, 60), (200, 180, 160))
+    out = ocr.preprocess(noisy)
+    assert out.mode == "1"
+
+
+def test_preprocess_upscales_small_crops():
+    from PIL import Image
+    from token_distiller import ocr
+
+    small = Image.new("RGB", (80, 40), "white")
+    out = ocr.preprocess(small)
+    assert out.width > small.width
+
+
+def test_otsu_threshold_separates_two_peaks():
+    from token_distiller.ocr import _otsu_threshold
+
+    hist = [0] * 256
+    hist[20] = 500   # dark cluster
+    hist[230] = 500  # light cluster
+    assert 20 < _otsu_threshold(hist) < 230
+
+
+def test_otsu_threshold_handles_empty_histogram():
+    from token_distiller.ocr import _otsu_threshold
+
+    assert _otsu_threshold([0] * 256) == 128
