@@ -6,6 +6,29 @@ Pure Python. No shell scripts, no Node/TypeScript.
 
 ## Setup
 
+### From PyPI
+
+```bash
+brew install poppler   # required by pdf2image for PDF page rasterization
+pip install token-distiller
+```
+
+### As a Claude Code plugin
+
+```
+/plugin marketplace add priyanchen/token-distiller
+/plugin install token-distiller@token-distiller
+```
+
+This wires the hook configuration only. Claude Code has no mechanism to run setup
+commands after installing a plugin, so it can't provision a Python environment for you —
+separately run `pip install token-distiller` so the `distill` binary the hook invokes is
+on `PATH`. Skipping that step doesn't break anything: the hook fails open, so `Read` on a
+PDF passes through unchanged rather than erroring. It just means nothing gets distilled
+until the binary is actually installed.
+
+### From source
+
 ```bash
 brew install poppler   # required by pdf2image for PDF page rasterization
 python3 -m venv .venv
@@ -48,7 +71,12 @@ distill install-hook          # wire the PreToolUse Read-interception hook into 
 ```
 
 Every command that distills a PDF accepts `--no-figures` to skip reading embedded figures,
-and `--no-vision` to stay on local OCR only.
+and `--no-vision` to stay on local OCR only. `distill file` additionally accepts
+`--accurate-tokens`, which calls Anthropic's `count_tokens` endpoint to report the real
+tokenizer count for the distilled output next to the chars/4 estimate. It's opt-in because
+it needs an API key (`TOKEN_DISTILLER_ANTHROPIC_API_KEY` or `ANTHROPIC_API_KEY`) and a
+network round trip — the call itself is free and doesn't count against message-creation
+rate limits, but the estimate is what every other command uses by default.
 
 ## Compressing command output
 
@@ -160,6 +188,11 @@ Toggle any of it off: `TOKEN_DISTILLER_CACHE=0`, `TOKEN_DISTILLER_REREAD_COLLAPS
 alone would cost. Reading a PDF natively renders each page to an image and bills those
 pixels on top of the text, so a 25-page text PDF costs ~60,000 tokens to read raw but
 ~1,800 distilled (33x). Scoring it as text-only would have reported a meaningless 1.0x.
+
+Both figures are estimates (chars/4 for text, Anthropic's published pixel formula for
+images) — good enough to compare methods, not exact. `distill file --accurate-tokens`
+swaps the distilled-side estimate for a real count from Anthropic's tokenizer, to check
+the estimate rather than trust it.
 
 That 33x describes a *sparse* page, where a fixed per-page rendering cost dominates a
 small amount of actual text — it is not a document-size-independent multiplier. A

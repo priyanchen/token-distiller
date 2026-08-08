@@ -102,10 +102,22 @@ def cmd_file(args) -> int:
     if not args.no_save_log:
         _log_run(result, trigger="cli")
 
+    exact_tokens = exact_tokens_error = None
+    if args.accurate_tokens:
+        from token_distiller.exact_tokens import ExactCountUnavailable, count_tokens_exact
+
+        try:
+            exact_tokens = count_tokens_exact(result.rendered_text)
+        except ExactCountUnavailable as exc:
+            exact_tokens_error = str(exc)
+
     if args.json:
         payload = _result_to_dict(result)
         payload["cache_handle"] = handle
         payload["cache_hit"] = cached
+        if args.accurate_tokens:
+            payload["distilled_tokens_exact"] = exact_tokens
+            payload["accurate_tokens_error"] = exact_tokens_error
         print(json.dumps(payload, indent=2))
     else:
         suffix = "  [cached]" if cached else ""
@@ -117,6 +129,11 @@ def cmd_file(args) -> int:
             f"  tokens: {result.raw_tokens_est} -> {result.distilled_tokens_est}  "
             f"({result.compression_ratio:.1f}x compression)"
         )
+        if args.accurate_tokens:
+            if exact_tokens is not None:
+                print(f"  exact distilled tokens: {exact_tokens}  (estimate was {result.distilled_tokens_est})")
+            else:
+                print(f"  exact tokens unavailable: {exact_tokens_error}")
         if result.boilerplate:
             collapsed = sum(e["occurrences"] for e in result.boilerplate)
             print(f"  boilerplate: {len(result.boilerplate)} line(s) collapsed, {collapsed} occurrence(s)")
@@ -488,6 +505,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="skip reading embedded figures (faster; leaves diagram content uncaptured)",
     )
     p_file.add_argument("--no-save-log", action="store_true")
+    p_file.add_argument(
+        "--accurate-tokens",
+        action="store_true",
+        help="get an exact distilled-token count via the Anthropic count_tokens API "
+        "(needs an API key; adds a network call; free to call)",
+    )
     p_file.set_defaults(func=cmd_file)
 
     p_expand = sub.add_parser("expand", help="retrieve the full distilled text for a handle")

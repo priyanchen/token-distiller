@@ -4,23 +4,23 @@
       {
         "matcher": "Read",
         "hooks": [
-          { "type": "command", "if": "Read(*.pdf)", "command": "\"${CLAUDE_PLUGIN_ROOT}/.venv/bin/distill\" hook-read", "timeout": 60000 },
-          { "type": "command", "if": "Read(*.jpg)", "command": "\"${CLAUDE_PLUGIN_ROOT}/.venv/bin/distill\" hook-read", "timeout": 60000 },
-          { "type": "command", "if": "Read(*.jpeg)", "command": "\"${CLAUDE_PLUGIN_ROOT}/.venv/bin/distill\" hook-read", "timeout": 60000 },
-          { "type": "command", "if": "Read(*.png)", "command": "\"${CLAUDE_PLUGIN_ROOT}/.venv/bin/distill\" hook-read", "timeout": 60000 },
-          { "type": "command", "if": "Read(*.heic)", "command": "\"${CLAUDE_PLUGIN_ROOT}/.venv/bin/distill\" hook-read", "timeout": 60000 },
-          { "type": "command", "if": "Read(*.heif)", "command": "\"${CLAUDE_PLUGIN_ROOT}/.venv/bin/distill\" hook-read", "timeout": 60000 },
-          { "type": "command", "if": "Read(*.tiff)", "command": "\"${CLAUDE_PLUGIN_ROOT}/.venv/bin/distill\" hook-read", "timeout": 60000 },
-          { "type": "command", "if": "Read(*.tif)", "command": "\"${CLAUDE_PLUGIN_ROOT}/.venv/bin/distill\" hook-read", "timeout": 60000 },
-          { "type": "command", "if": "Read(*.bmp)", "command": "\"${CLAUDE_PLUGIN_ROOT}/.venv/bin/distill\" hook-read", "timeout": 60000 },
-          { "type": "command", "if": "Read(*.webp)", "command": "\"${CLAUDE_PLUGIN_ROOT}/.venv/bin/distill\" hook-read", "timeout": 60000 }
+          { "type": "command", "if": "Read(*.pdf)", "command": "distill hook-read", "timeout": 60000 },
+          { "type": "command", "if": "Read(*.jpg)", "command": "distill hook-read", "timeout": 60000 },
+          { "type": "command", "if": "Read(*.jpeg)", "command": "distill hook-read", "timeout": 60000 },
+          { "type": "command", "if": "Read(*.png)", "command": "distill hook-read", "timeout": 60000 },
+          { "type": "command", "if": "Read(*.heic)", "command": "distill hook-read", "timeout": 60000 },
+          { "type": "command", "if": "Read(*.heif)", "command": "distill hook-read", "timeout": 60000 },
+          { "type": "command", "if": "Read(*.tiff)", "command": "distill hook-read", "timeout": 60000 },
+          { "type": "command", "if": "Read(*.tif)", "command": "distill hook-read", "timeout": 60000 },
+          { "type": "command", "if": "Read(*.bmp)", "command": "distill hook-read", "timeout": 60000 },
+          { "type": "command", "if": "Read(*.webp)", "command": "distill hook-read", "timeout": 60000 }
         ]
       }
     ],
     "PostToolUse": [
       {
         "hooks": [
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/.venv/bin/distill\" hook-activity", "timeout": 5000 }
+          { "type": "command", "command": "distill hook-activity", "timeout": 5000 }
         ]
       }
     ]
