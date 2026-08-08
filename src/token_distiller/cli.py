@@ -427,6 +427,27 @@ def cmd_audit(args) -> int:
     return 0
 
 
+def cmd_compress(args) -> int:
+    """Reads command output on stdin. Never runs a command: the caller pipes into this, so
+    no shell string is ever constructed from untrusted input."""
+    from token_distiller import bash_compress
+    from token_distiller.tokens import estimate_text_tokens
+
+    raw = sys.stdin.read()
+    compressed = bash_compress.compress(raw, kind=args.kind)
+
+    if args.stats:
+        before = estimate_text_tokens(raw)
+        after = estimate_text_tokens(compressed)
+        saved = (1 - after / before) * 100 if before else 0.0
+        print(
+            f"[token-distiller] {before} -> {after} tokens ({saved:.0f}% saved)",
+            file=sys.stderr,
+        )
+    print(compressed)
+    return 0
+
+
 def cmd_install_hook(args) -> int:
     from token_distiller import hook_installer
 
@@ -516,6 +537,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_audit.add_argument("--memory-dir")
     p_audit.add_argument("--json", action="store_true")
     p_audit.set_defaults(func=cmd_audit)
+
+    p_compress = sub.add_parser(
+        "compress", help="compress verbose command output read from stdin"
+    )
+    p_compress.add_argument(
+        "--kind",
+        choices=["auto", "git-status", "pytest", "install", "generic"],
+        default="auto",
+    )
+    p_compress.add_argument("--stats", action="store_true", help="report savings on stderr")
+    p_compress.set_defaults(func=cmd_compress)
 
     p_install = sub.add_parser("install-hook", help="wire the PreToolUse Read hook into settings.json")
     p_install.add_argument("--target", choices=["project", "global"], default="project")

@@ -34,8 +34,34 @@ distill mode                      # current session activity mode
 distill audit [path]              # CLAUDE.md/MEMORY.md structural audit
 distill report                    # cumulative token/savings report
 distill expand <handle>           # full distilled text for any handle (--list to browse)
+distill compress                  # compress verbose command output read from stdin
 distill install-hook              # wire the PreToolUse Read-interception hook into a project
 ```
+
+## Compressing command output
+
+Verbose CLI output is the one context cost the document pipeline doesn't touch. Pipe it in:
+
+```bash
+pytest -q | distill compress --stats
+git status | distill compress
+npm install | distill compress
+```
+
+Measured on this repo's own output: a 169-test `pytest` run goes **289 → 8 tokens (97%)**,
+keeping the failure list, the first assertion detail, and the summary line while dropping
+the wall of dots. Plain `git status` goes **153 → 58 tokens (62%)**, grouped by state.
+
+Two properties worth knowing:
+
+- **It never inflates.** `git status --porcelain` is already denser than any per-state
+  summary of it, so when compression would produce more text than it consumed, the original
+  is returned unchanged.
+- **It never executes anything.** `distill compress` reads stdin and writes stdout. The
+  alternative — a hook that rewrites your Bash command to route it through a wrapper —
+  means building shell strings out of model-supplied input, which is exactly where command
+  injection lives. Piping output that you already ran has no such surface. Automatic
+  interception is deliberately not implemented for that reason.
 
 ## How it avoids losing anything
 

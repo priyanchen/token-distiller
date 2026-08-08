@@ -47,6 +47,10 @@ DEFAULT_TOP_K = 5
 # --- M4: activity mode ---
 ACTIVITY_WINDOW_SIZE = 10
 
+# --- Bash output compression ---
+BASH_MAX_LINES = int(os.environ.get("TOKEN_DISTILLER_BASH_MAX_LINES", "40"))
+BASH_TAIL_LINES = 5
+
 # --- M5: cache, boilerplate, large-document handling ---
 CACHE_ENABLED = os.environ.get("TOKEN_DISTILLER_CACHE", "1") != "0"
 # Re-reading an unchanged file in the same session returns a pointer instead of the
