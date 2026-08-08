@@ -62,6 +62,7 @@ def _pages_to_json(result: DistillResult) -> str:
                 "distilled_tokens_est": p.distilled_tokens_est,
                 "warnings": p.warnings,
                 "image_count": p.image_count,
+                "figures": p.figures,
             }
             for p in result.pages
         ]
@@ -83,6 +84,7 @@ def _pages_from_json(blob: str) -> list[PageResult]:
             # don't have it, and a missing image count should read as "none seen",
             # not raise on load.
             image_count=d.get("image_count", 0),
+            figures=d.get("figures", []),
         )
         for d in json.loads(blob)
     ]

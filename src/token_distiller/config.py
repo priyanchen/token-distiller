@@ -58,6 +58,21 @@ BOILERPLATE_ENABLED = os.environ.get("TOKEN_DISTILLER_BOILERPLATE", "1") != "0"
 LARGE_DOC_TOKEN_THRESHOLD = int(os.environ.get("TOKEN_DISTILLER_LARGE_DOC_TOKENS", "8000"))
 LARGE_DOC_HEAD_TOKENS = 1500
 
+# --- M6: reading figures embedded in otherwise-text pages ---
+# Native text extraction cannot see a diagram, so each embedded figure is cropped out and
+# put through the same OCR -> vision chain used for scanned pages. On by default: a
+# flagged-but-unread diagram was the one real gap in the "nothing is discarded" promise.
+DESCRIBE_FIGURES = os.environ.get("TOKEN_DISTILLER_DESCRIBE_FIGURES", "1") != "0"
+# Ignore hairline rules, borders and background strips — describing a 2pt spacer spends a
+# vision call to learn nothing.
+FIGURE_MIN_SIDE_PT = float(os.environ.get("TOKEN_DISTILLER_FIGURE_MIN_SIDE_PT", "48"))
+FIGURE_RENDER_DPI = 200
+FIGURE_PROMPT = (
+    "This is a figure cropped from a document page; the surrounding body text is already "
+    "captured separately. Transcribe every label, axis, number, and caption verbatim, then "
+    "state in one or two sentences what the figure shows. Do not describe visual styling."
+)
+
 # Anthropic downscales images whose long edge exceeds this before billing.
 IMAGE_MAX_EDGE_PX = 1568
 # Rasterization DPI a host uses when turning a PDF page into an image for the model.

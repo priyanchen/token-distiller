@@ -54,16 +54,22 @@ shortening happens. Anything the hook shortens carries a handle, and `distill ex
 - **Large documents defer rather than truncate.** Past `TOKEN_DISTILLER_LARGE_DOC_TOKENS`
   (default 8000) the hook returns a head plus retrieval instructions. Nothing is
   discarded — `distill expand` or `distill index` + `distill query` reach the rest.
-- **Pages with embedded images are flagged, not silently skipped.** Native-text
-  extraction reads a page's text layer only — a diagram, chart, or illustration sitting
-  next to that text isn't described anywhere in the output. Every native-text page's
-  embedded-image count is recorded, and `pages_with_uncaptured_images()` surfaces it as
-  one compact note (`"N page(s) contain embedded image(s) ... (pages 3, 12, 19, ...)"`)
-  in `distill file`'s output, `--json`, and the hook-read response Claude actually sees
-  — never one line per page. This is the one case the guarantee above doesn't fully
-  cover: text that gets shortened always expands back in full via `distill expand`;
-  image content on an otherwise-native-text page is flagged rather than distilled —
-  there's no OCR/vision path that reaches it automatically today.
+- **Embedded figures are read, not skipped.** Native-text extraction sees a page's text
+  layer only, so a diagram sitting beside that text would otherwise go unread. Each
+  embedded figure is cropped out by its bounding box and put through the same OCR →
+  vision chain used for scanned pages, then written into the output labelled
+  `[figure N on page M]`. Cropping to the figure matters: the surrounding prose is
+  already captured losslessly, so including it would pay vision tokens to re-read text
+  we already have. Hairline rules and background strips are skipped via
+  `TOKEN_DISTILLER_FIGURE_MIN_SIDE_PT` (default 48pt). `--no-figures` turns it off.
+- **Figures that still can't be read are flagged, never dropped silently.** A purely
+  graphical diagram with no legible labels yields nothing from OCR, and without
+  `ANTHROPIC_API_KEY` there's no vision fallback to describe it. Those pages stay in
+  `pages_with_uncaptured_images()` and surface as one compact note — never one line per
+  page — in `distill file`, `--json`, and the hook-read response. Measured on a real
+  765-page book: of two diagram pages, one transcribed to `The Mission / The Market /
+  The Competition / The Leader / The Operations` from OCR alone, the other reported as
+  unreadable rather than quietly omitted. Set `ANTHROPIC_API_KEY` to close that gap.
 
 Toggle any of it off: `TOKEN_DISTILLER_CACHE=0`, `TOKEN_DISTILLER_REREAD_COLLAPSE=0`,
 `TOKEN_DISTILLER_BOILERPLATE=0`.

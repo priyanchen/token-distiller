@@ -139,6 +139,67 @@ def make_pdf_with_images(path, pages: list[list[str]], image_pages: set[int]) ->
     return path
 
 
+def make_pdf_with_legible_figure(path, page_text: str, figure_lines: list[str]) -> str:
+    """A PDF whose embedded figure contains real rendered text, so the OCR/vision figure
+    path has something to actually recover. The flat-colour image in
+    make_pdf_with_images is enough to test detection, but not extraction."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    candidates = [
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/Library/Fonts/Arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    ]
+    font_file = next((c for c in candidates if os.path.isfile(c)), None)
+    if font_file is None:
+        pytest.skip("no usable TrueType font for rendering a legible figure")
+
+    img_w, img_h = 480, 220
+    img = Image.new("RGB", (img_w, img_h), "white")
+    draw = ImageDraw.Draw(img)
+    font = ImageFont.truetype(font_file, 30)
+    y = 20
+    for line in figure_lines:
+        draw.text((18, y), line, fill="black", font=font)
+        y += 42
+    raw = img.tobytes()  # uncompressed DeviceRGB, no filter — simplest valid XObject
+
+    content_ops = [f"BT /F1 12 Tf 72 720 Td ({page_text}) Tj ET", "q 342 0 0 157 40 400 cm /Im1 Do Q"]
+    stream = "\n".join(content_ops).encode("latin-1")
+
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [4 0 R] /Count 1 >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        b"<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 3 0 R >> "
+        b"/XObject << /Im1 6 0 R >> >> /MediaBox [0 0 612 792] /Contents 5 0 R >>",
+        b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream",
+        f"<< /Type /XObject /Subtype /Image /Width {img_w} /Height {img_h} "
+        f"/ColorSpace /DeviceRGB /BitsPerComponent 8 /Length {len(raw)} >>\nstream\n".encode()
+        + raw
+        + b"\nendstream",
+    ]
+
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for i, body in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += f"{i} 0 obj\n".encode() + body + b"\nendobj\n"
+    xref = len(out)
+    n = len(objects) + 1
+    out += f"xref\n0 {n}\n".encode() + b"0000000000 65535 f \n"
+    for off in offsets:
+        out += f"{off:010d} 00000 n \n".encode()
+    out += b"trailer\n" + f"<< /Size {n} /Root 1 0 R >>\n".encode()
+    out += b"startxref\n" + f"{xref}\n".encode() + b"%%EOF"
+
+    path = str(path)
+    with open(path, "wb") as f:
+        f.write(out)
+    return path
+
+
 @pytest.fixture
 def pdf_with_images_factory(tmp_path):
     counter = {"n": 0}

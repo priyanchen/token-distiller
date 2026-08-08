@@ -107,6 +107,8 @@ def test_hook_read_notes_pages_with_uncaptured_images(monkeypatch, capsys):
     the model reading the file."""
     from tests.conftest import make_pdf_with_images
 
+    # figure reading off, so the image stays uncaptured and the gap note is what renders
+    monkeypatch.setattr("token_distiller.pipeline.DESCRIBE_FIGURES", False)
     path = make_pdf_with_images(
         "/tmp/hook_img_test.pdf",
         pages=[

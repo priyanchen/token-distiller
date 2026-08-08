@@ -27,6 +27,22 @@ class PageResult:
     # layer only, so any information carried solely by the image is not represented
     # anywhere in the distilled output.
     image_count: int = 0
+    # Text recovered from this page's embedded figures via the OCR/vision chain. One entry
+    # per figure that was successfully read; empty when figure reading is disabled or when
+    # every attempt failed, which is what keeps pages_with_uncaptured_images() honest.
+    figures: list[str] = field(default_factory=list)
+
+    @property
+    def text_with_figures(self) -> str:
+        """Figure text is labelled rather than spliced silently into the body, so a reader
+        can tell prose from a transcribed diagram."""
+        if not self.figures:
+            return self.text
+        blocks = [
+            f"[figure {i} on page {self.page_index + 1}] {fig}"
+            for i, fig in enumerate(self.figures, start=1)
+        ]
+        return "\n\n".join([self.text, *blocks]) if self.text else "\n\n".join(blocks)
 
 
 @dataclass
@@ -53,7 +69,7 @@ class DistillResult:
 
     @property
     def text(self) -> str:
-        return "\n\n".join(p.text for p in self.pages)
+        return "\n\n".join(p.text_with_figures for p in self.pages)
 
     @property
     def rendered_text(self) -> str:
@@ -76,14 +92,21 @@ class DistillResult:
         return counts
 
     def pages_with_uncaptured_images(self) -> list[int]:
-        """Page indices where native-text extraction ran -- so nothing ever rasterized
-        or OCR'd the page -- but the page also contains one or more embedded images.
-        Their content (a diagram, a figure, an illustration) is not lost or deferred
-        like large-document text; it was simply never read in the first place. This is
-        the one gap in the "nothing is discarded" guarantee: that guarantee covers text
-        that gets shortened, not image content on an otherwise-native-text page."""
+        """Native-text pages carrying embedded images that were *not* read.
+
+        A page qualifies only when no figure text was recovered for it — figure reading
+        disabled, or every crop failed. Once a figure has been described, its content is
+        in the distilled output and the page is no longer a gap.
+        """
         return [
             p.page_index
             for p in self.pages
-            if p.method == DistillMethod.NATIVE_TEXT and p.image_count > 0
+            if p.method == DistillMethod.NATIVE_TEXT and p.image_count > 0 and not p.figures
         ]
+
+    def pages_with_described_figures(self) -> list[int]:
+        return [p.page_index for p in self.pages if p.figures]
+
+    @property
+    def figure_count(self) -> int:
+        return sum(len(p.figures) for p in self.pages)

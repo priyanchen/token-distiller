@@ -17,7 +17,7 @@ def _image_to_base64_png(image: Image.Image) -> str:
     return base64.standard_b64encode(buf.getvalue()).decode("utf-8")
 
 
-def describe_image(image: Image.Image) -> str:
+def describe_image(image: Image.Image, prompt: str = VISION_PROMPT) -> str:
     api_key = os.environ.get(ANTHROPIC_API_KEY_ENV)
     if not api_key:
         raise VisionUnavailable(f"{ANTHROPIC_API_KEY_ENV} not set")
@@ -40,7 +40,7 @@ def describe_image(image: Image.Image) -> str:
                             "data": _image_to_base64_png(image),
                         },
                     },
-                    {"type": "text", "text": VISION_PROMPT},
+                    {"type": "text", "text": prompt},
                 ],
             }
         ],

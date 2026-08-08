@@ -23,24 +23,39 @@ def _result_to_dict(result) -> dict:
         "duration_ms": result.duration_ms,
         "warnings": result.warnings,
         "pages_with_uncaptured_images": result.pages_with_uncaptured_images(),
+        "pages_with_described_figures": result.pages_with_described_figures(),
+        "figure_count": result.figure_count,
         "text": result.text,
     }
 
 
+def _page_list(pages: list[int], one_indexed: bool = True) -> str:
+    offset = 1 if one_indexed else 0
+    shown = ", ".join(str(p + offset) for p in pages[:8])
+    return shown + (f", +{len(pages) - 8} more" if len(pages) > 8 else "")
+
+
+def _figures_note(result) -> str | None:
+    """One compact line, never one per page -- enumerating pages bloats exactly the thing
+    this tool exists to shrink."""
+    described = result.pages_with_described_figures()
+    if not described:
+        return None
+    return (
+        f"{result.figure_count} embedded figure(s) on {len(described)} page(s) were read "
+        f"and transcribed into the text below, labelled [figure N on page M] "
+        f"(pages {_page_list(described)})"
+    )
+
+
 def _uncaptured_images_note(result, one_indexed: bool = True) -> str | None:
-    """One compact line, not one line per page -- a page list bloats exactly the thing
-    this tool exists to shrink, so this always summarizes rather than enumerating."""
     pages = result.pages_with_uncaptured_images()
     if not pages:
         return None
-    shown = pages[:8]
-    offset = 1 if one_indexed else 0
-    page_list = ", ".join(str(p + offset) for p in shown)
-    more = f", +{len(pages) - 8} more" if len(pages) > 8 else ""
     return (
         f"{len(pages)} page(s) contain embedded image(s) (diagrams/figures/"
-        f"illustrations) that text extraction does not capture -- their content isn't "
-        f"in the distilled text at all (pages {page_list}{more})"
+        f"illustrations) that could not be read -- their content isn't "
+        f"in the distilled text (pages {_page_list(pages, one_indexed)})"
     )
 
 
@@ -79,7 +94,10 @@ def cmd_file(args) -> int:
     from token_distiller import pipeline
 
     result, handle, cached = pipeline.distill(
-        args.path, allow_vision=not args.no_vision, use_cache=not args.no_cache
+        args.path,
+        allow_vision=not args.no_vision,
+        use_cache=not args.no_cache,
+        describe_figures=not args.no_figures,
     )
     if not args.no_save_log:
         _log_run(result, trigger="cli")
@@ -106,6 +124,9 @@ def cmd_file(args) -> int:
             print(f"  handle: {handle}  (distill expand {handle})")
         for w in result.warnings:
             print(f"  warning: {w}")
+        figures = _figures_note(result)
+        if figures:
+            print(f"  figures: {figures}")
         note = _uncaptured_images_note(result)
         if note:
             print(f"  note: {note}")
@@ -194,6 +215,9 @@ def cmd_hook_read(args) -> int:
         f"{result.distilled_tokens_est} tokens ({result.compression_ratio:.1f}x). "
         f"Methods: {result.method_counts()}."
     )
+    figures_note = _figures_note(result)
+    if figures_note:
+        header += f" Figures: {figures_note}."
     images_note = _uncaptured_images_note(result)
     if images_note:
         header += f" Note: {images_note}."
@@ -414,6 +438,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_file.add_argument("--json", action="store_true")
     p_file.add_argument("--no-vision", action="store_true")
     p_file.add_argument("--no-cache", action="store_true")
+    p_file.add_argument(
+        "--no-figures",
+        action="store_true",
+        help="skip reading embedded figures (faster; leaves diagram content uncaptured)",
+    )
     p_file.add_argument("--no-save-log", action="store_true")
     p_file.set_defaults(func=cmd_file)
 

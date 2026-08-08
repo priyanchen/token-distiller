@@ -143,7 +143,9 @@ def test_page_with_image_and_native_text_is_flagged(pdf_with_images_factory):
         ],
         image_pages={1},
     )
-    result, _, _ = pipeline.distill(path)
+    # describe_figures=False isolates the flagging behaviour: with figure reading on, a
+    # readable figure is transcribed and the page stops counting as a gap.
+    result, _, _ = pipeline.distill(path, describe_figures=False)
     assert result.method_counts() == {"native_text": 2}
     assert result.pages_with_uncaptured_images() == [1]
     assert result.pages[1].image_count == 1
@@ -155,7 +157,7 @@ def test_page_without_images_is_not_flagged(pdf_with_images_factory):
         pages=[["Ordinary text-only page, nothing embedded, nothing to flag here."]],
         image_pages=set(),
     )
-    result, _, _ = pipeline.distill(path)
+    result, _, _ = pipeline.distill(path, describe_figures=False)
     assert result.pages_with_uncaptured_images() == []
 
 
@@ -166,7 +168,64 @@ def test_image_count_survives_cache_round_trip(pdf_with_images_factory):
         pages=[["A page with a figure embedded next to a full paragraph of text."]],
         image_pages={0},
     )
-    _, handle, _ = pipeline.distill(path)
+    _, handle, _ = pipeline.distill(path, describe_figures=False)
     reloaded = cache.get_by_id(handle)
     assert reloaded.pages[0].image_count == 1
     assert reloaded.pages_with_uncaptured_images() == [0]
+
+
+@pytest.mark.ocr
+def test_figure_on_native_text_page_is_read_and_labelled(tmp_path):
+    """The point of M6: a diagram sitting next to body text is transcribed into the
+    output instead of merely flagged. Marked ocr -- it drives real Tesseract."""
+    from tests.conftest import make_pdf_with_legible_figure
+
+    path = make_pdf_with_legible_figure(
+        tmp_path / "figure_doc.pdf",
+        page_text="Body prose that native extraction reads on its own without any OCR.",
+        figure_lines=["QUARTERLY REVENUE", "Q1 340 Q2 580", "Q3 910 Q4 1240"],
+    )
+    result, _, _ = pipeline.distill(path, describe_figures=True, use_cache=False)
+
+    assert result.pages[0].image_count == 1
+    assert result.pages[0].figures, "figure produced no recovered text"
+    assert result.figure_count == 1
+    # once read, the page is no longer an uncaptured gap
+    assert result.pages_with_uncaptured_images() == []
+    assert result.pages_with_described_figures() == [0]
+    # the figure's content reaches the distilled text, labelled as a figure
+    assert "[figure 1 on page 1]" in result.text
+    assert "REVENUE" in result.text.upper()
+    # and the body prose is still there
+    assert "Body prose" in result.text
+
+
+@pytest.mark.ocr
+def test_figures_survive_the_cache_round_trip(tmp_path):
+    from tests.conftest import make_pdf_with_legible_figure
+    from token_distiller import cache
+
+    path = make_pdf_with_legible_figure(
+        tmp_path / "figure_cached.pdf",
+        page_text="Page prose alongside an embedded chart that must survive caching.",
+        figure_lines=["MARKET SHARE", "NORTH 42", "SOUTH 58"],
+    )
+    fresh, handle, _ = pipeline.distill(path, describe_figures=True)
+    reloaded = cache.get_by_id(handle)
+    assert reloaded.pages[0].figures == fresh.pages[0].figures
+    assert reloaded.text == fresh.text
+
+
+@pytest.mark.ocr
+def test_no_figures_flag_leaves_the_page_flagged(tmp_path):
+    from tests.conftest import make_pdf_with_legible_figure
+
+    path = make_pdf_with_legible_figure(
+        tmp_path / "figure_skipped.pdf",
+        page_text="Body prose present, but figure reading is turned off for this run.",
+        figure_lines=["SHOULD NOT BE TRANSCRIBED"],
+    )
+    result, _, _ = pipeline.distill(path, describe_figures=False, use_cache=False)
+    assert result.pages[0].figures == []
+    assert result.pages_with_uncaptured_images() == [0]
+    assert "SHOULD NOT BE TRANSCRIBED" not in result.text
