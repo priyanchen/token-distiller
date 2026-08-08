@@ -71,6 +71,7 @@ def pack(
     include: str | None = None,
     exclude: str | None = None,
     allow_vision: bool = True,
+    describe_figures: bool | None = None,
 ) -> PackResult:
     from token_distiller import pipeline  # lazy: only needed once a PDF/image shows up
 
@@ -93,7 +94,11 @@ def pack(
         suffix = path.suffix.lower()
         if suffix in DISTILLABLE_EXTENSIONS:
             try:
-                dist_result, _, _ = pipeline.distill(str(path), allow_vision=allow_vision)
+                dist_result, _, _ = pipeline.distill(
+                    str(path),
+                    allow_vision=allow_vision,
+                    describe_figures=describe_figures,
+                )
                 result.files.append(
                     PackedFile(
                         path=rel_str,

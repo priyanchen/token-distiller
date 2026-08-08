@@ -169,3 +169,18 @@ def test_human_format_git_status_is_detected():
     assert "modified (1)" in out
     assert "untracked (1)" in out
     assert len(out) < len(human)
+
+
+def test_every_distilling_subcommand_exposes_no_figures():
+    """Figure reading is on by default, so each command that can trigger it must offer a
+    way to turn it off. `file` had the flag; scan/repo/index silently did not."""
+    from token_distiller.cli import build_parser
+
+    parser = build_parser()
+    subparsers = next(
+        a for a in parser._actions if hasattr(a, "choices") and a.choices
+    ).choices
+    for name in ("file", "scan", "repo", "index"):
+        options = {o for action in subparsers[name]._actions for o in action.option_strings}
+        assert "--no-figures" in options, f"{name} is missing --no-figures"
+        assert "--no-vision" in options, f"{name} is missing --no-vision"
