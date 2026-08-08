@@ -31,19 +31,24 @@ retrieval on top of the default BM25 keyword index.
 
 ## CLI
 
+Placeholders are uppercase; substitute your own path, directory, or question.
+
 ```bash
-distill file <path>              # distill one PDF/photo
-distill scan <dir>               # batch distill a directory
-distill repo <dir>                # Repomix-style repo pack
-distill index <dir>               # build a retrieval index
-distill query "<question>"        # query the index
-distill mode                      # current session activity mode
-distill audit [path]              # CLAUDE.md/MEMORY.md structural audit
-distill report                    # cumulative token/savings report
-distill expand <handle>           # full distilled text for any handle (--list to browse)
-distill compress                  # compress verbose command output read from stdin
-distill install-hook              # wire the PreToolUse Read-interception hook into a project
+distill file PATH             # distill one PDF/photo
+distill scan DIR              # batch distill a directory
+distill repo DIR              # Repomix-style repo pack
+distill index DIR             # build a retrieval index
+distill query "QUESTION"      # query the index
+distill mode                  # current session activity mode
+distill audit PATH            # CLAUDE.md/MEMORY.md structural audit (defaults to .)
+distill report                # cumulative token/savings report
+distill expand HANDLE         # full distilled text for a handle (--list to browse)
+distill compress              # compress verbose command output read from stdin
+distill install-hook          # wire the PreToolUse Read-interception hook into a project
 ```
+
+Every command that distills a PDF accepts `--no-figures` to skip reading embedded figures,
+and `--no-vision` to stay on local OCR only.
 
 ## Compressing command output
 

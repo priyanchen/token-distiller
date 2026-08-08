@@ -147,7 +147,11 @@ def cmd_scan(args) -> int:
     ok = failed = 0
     for p in paths:
         try:
-            result, _, cached = pipeline.distill(str(p), allow_vision=not args.no_vision)
+            result, _, cached = pipeline.distill(
+                str(p),
+                allow_vision=not args.no_vision,
+                describe_figures=not args.no_figures,
+            )
             _log_run(result, trigger="cli")
             total_raw += result.raw_tokens_est
             total_distilled += result.distilled_tokens_est
@@ -295,7 +299,11 @@ def cmd_repo(args) -> int:
     from token_distiller import repo_pack
 
     result = repo_pack.pack(
-        args.dir, include=args.include, exclude=args.exclude, allow_vision=not args.no_vision
+        args.dir,
+        include=args.include,
+        exclude=args.exclude,
+        allow_vision=not args.no_vision,
+        describe_figures=not args.no_figures,
     )
     output = repo_pack.render(result, style=args.style)
 
@@ -315,7 +323,11 @@ def cmd_repo(args) -> int:
 def cmd_index(args) -> int:
     from token_distiller import chunker, embeddings, index_store, repo_pack
 
-    result = repo_pack.pack(args.dir, allow_vision=not args.no_vision)
+    result = repo_pack.pack(
+        args.dir,
+        allow_vision=not args.no_vision,
+        describe_figures=not args.no_figures,
+    )
     total_chunks = 0
     embed_model = None
     embed_warned = False
@@ -489,6 +501,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_scan.add_argument("dir")
     p_scan.add_argument("--recursive", action="store_true")
     p_scan.add_argument("--no-vision", action="store_true")
+    p_scan.add_argument(
+        "--no-figures",
+        action="store_true",
+        help="skip reading embedded figures (faster; leaves diagram content uncaptured)",
+    )
     p_scan.set_defaults(func=cmd_scan)
 
     p_report = sub.add_parser("report", help="cumulative token/savings report")
@@ -507,11 +524,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_repo.add_argument("--style", choices=["xml", "markdown"], default="markdown")
     p_repo.add_argument("--output")
     p_repo.add_argument("--no-vision", action="store_true")
+    p_repo.add_argument(
+        "--no-figures",
+        action="store_true",
+        help="skip reading embedded figures (faster; leaves diagram content uncaptured)",
+    )
     p_repo.set_defaults(func=cmd_repo)
 
     p_index = sub.add_parser("index", help="build a retrieval index over a directory")
     p_index.add_argument("dir")
     p_index.add_argument("--no-vision", action="store_true")
+    p_index.add_argument(
+        "--no-figures",
+        action="store_true",
+        help="skip reading embedded figures (faster; leaves diagram content uncaptured)",
+    )
     p_index.add_argument("--no-semantic", action="store_true")
     p_index.set_defaults(func=cmd_index)
 

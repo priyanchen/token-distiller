@@ -82,3 +82,22 @@ def test_xml_render_is_well_formed(tmp_path):
     rendered = repo_pack.render(result, style="xml")
     assert rendered.startswith("<repo_pack>")
     assert rendered.rstrip().endswith("</repo_pack>")
+
+
+def test_pack_can_skip_figure_reading(tmp_path):
+    """repo/index pack PDFs through the same pipeline, so they need the same escape hatch
+    `distill file` has — otherwise a batch run has no way to avoid the OCR cost."""
+    from token_distiller import repo_pack as rp
+
+    make_pdf(tmp_path / "doc.pdf", [["A page with plenty of native text and no figures."]])
+    result = rp.pack(str(tmp_path), describe_figures=False)
+    assert any(f.path == "doc.pdf" and f.distilled for f in result.files)
+
+
+def test_pack_defaults_describe_figures_to_none(tmp_path):
+    """None means 'defer to config', so the caller isn't forced to know the default."""
+    import inspect
+
+    from token_distiller import repo_pack as rp
+
+    assert inspect.signature(rp.pack).parameters["describe_figures"].default is None
