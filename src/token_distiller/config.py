@@ -10,6 +10,14 @@ DB_PATH = HOME / "distill.db"
 MIN_NATIVE_TEXT_CHARS = 20  # below this, treat a PDF page as image-only
 OCR_CONF_THRESHOLD = 70.0  # mean Tesseract word confidence (0-100)
 OCR_MIN_WORD_COUNT = 5
+
+# A raw OCR pass this weak earns a second attempt on a preprocessed copy. Set high enough
+# that anything already reading cleanly skips the retry entirely.
+OCR_RETRY_CONF_THRESHOLD = 80.0
+OCR_RETRY_MIN_WORDS = 3
+# Tesseract wants roughly 300-DPI text; crops smaller than this get scaled up first.
+OCR_MIN_UPSCALE_PX = 600
+OCR_UPSCALE_FACTOR = 2
 RENDER_DPI = 200  # rasterization DPI for text-less PDF pages
 
 VISION_MODEL = os.environ.get("TOKEN_DISTILLER_VISION_MODEL", "claude-sonnet-5")
@@ -29,6 +37,10 @@ PDF_EXTENSIONS = {".pdf"}
 DISTILLABLE_EXTENSIONS = IMAGE_EXTENSIONS | PDF_EXTENSIONS
 
 ANTHROPIC_API_KEY_ENV = "ANTHROPIC_API_KEY"
+# Checked first, so this tool can be given a key without exporting ANTHROPIC_API_KEY
+# globally. That matters because the host agent may also read ANTHROPIC_API_KEY and
+# switch from subscription auth to per-token API billing if it finds one.
+SCOPED_API_KEY_ENV = "TOKEN_DISTILLER_ANTHROPIC_API_KEY"
 VOYAGE_API_KEY_ENV = "VOYAGE_API_KEY"
 
 # --- M3: retrieval ---
@@ -38,6 +50,10 @@ DEFAULT_TOP_K = 5
 
 # --- M4: activity mode ---
 ACTIVITY_WINDOW_SIZE = 10
+
+# --- Bash output compression ---
+BASH_MAX_LINES = int(os.environ.get("TOKEN_DISTILLER_BASH_MAX_LINES", "40"))
+BASH_TAIL_LINES = 5
 
 # --- M5: cache, boilerplate, large-document handling ---
 CACHE_ENABLED = os.environ.get("TOKEN_DISTILLER_CACHE", "1") != "0"
@@ -57,6 +73,21 @@ BOILERPLATE_ENABLED = os.environ.get("TOKEN_DISTILLER_BOILERPLATE", "1") != "0"
 # document. Deferred, not dropped: the full text stays retrievable via `distill expand`.
 LARGE_DOC_TOKEN_THRESHOLD = int(os.environ.get("TOKEN_DISTILLER_LARGE_DOC_TOKENS", "8000"))
 LARGE_DOC_HEAD_TOKENS = 1500
+
+# --- M6: reading figures embedded in otherwise-text pages ---
+# Native text extraction cannot see a diagram, so each embedded figure is cropped out and
+# put through the same OCR -> vision chain used for scanned pages. On by default: a
+# flagged-but-unread diagram was the one real gap in the "nothing is discarded" promise.
+DESCRIBE_FIGURES = os.environ.get("TOKEN_DISTILLER_DESCRIBE_FIGURES", "1") != "0"
+# Ignore hairline rules, borders and background strips — describing a 2pt spacer spends a
+# vision call to learn nothing.
+FIGURE_MIN_SIDE_PT = float(os.environ.get("TOKEN_DISTILLER_FIGURE_MIN_SIDE_PT", "48"))
+FIGURE_RENDER_DPI = 200
+FIGURE_PROMPT = (
+    "This is a figure cropped from a document page; the surrounding body text is already "
+    "captured separately. Transcribe every label, axis, number, and caption verbatim, then "
+    "state in one or two sentences what the figure shows. Do not describe visual styling."
+)
 
 # Anthropic downscales images whose long edge exceeds this before billing.
 IMAGE_MAX_EDGE_PX = 1568

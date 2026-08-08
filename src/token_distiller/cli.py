@@ -22,8 +22,41 @@ def _result_to_dict(result) -> dict:
         "compression_ratio": round(result.compression_ratio, 2),
         "duration_ms": result.duration_ms,
         "warnings": result.warnings,
+        "pages_with_uncaptured_images": result.pages_with_uncaptured_images(),
+        "pages_with_described_figures": result.pages_with_described_figures(),
+        "figure_count": result.figure_count,
         "text": result.text,
     }
+
+
+def _page_list(pages: list[int], one_indexed: bool = True) -> str:
+    offset = 1 if one_indexed else 0
+    shown = ", ".join(str(p + offset) for p in pages[:8])
+    return shown + (f", +{len(pages) - 8} more" if len(pages) > 8 else "")
+
+
+def _figures_note(result) -> str | None:
+    """One compact line, never one per page -- enumerating pages bloats exactly the thing
+    this tool exists to shrink."""
+    described = result.pages_with_described_figures()
+    if not described:
+        return None
+    return (
+        f"{result.figure_count} embedded figure(s) on {len(described)} page(s) were read "
+        f"and transcribed into the text below, labelled [figure N on page M] "
+        f"(pages {_page_list(described)})"
+    )
+
+
+def _uncaptured_images_note(result, one_indexed: bool = True) -> str | None:
+    pages = result.pages_with_uncaptured_images()
+    if not pages:
+        return None
+    return (
+        f"{len(pages)} page(s) contain embedded image(s) (diagrams/figures/"
+        f"illustrations) that could not be read -- their content isn't "
+        f"in the distilled text (pages {_page_list(pages, one_indexed)})"
+    )
 
 
 def _mean_ocr_confidence(result):
@@ -61,7 +94,10 @@ def cmd_file(args) -> int:
     from token_distiller import pipeline
 
     result, handle, cached = pipeline.distill(
-        args.path, allow_vision=not args.no_vision, use_cache=not args.no_cache
+        args.path,
+        allow_vision=not args.no_vision,
+        use_cache=not args.no_cache,
+        describe_figures=not args.no_figures,
     )
     if not args.no_save_log:
         _log_run(result, trigger="cli")
@@ -88,6 +124,12 @@ def cmd_file(args) -> int:
             print(f"  handle: {handle}  (distill expand {handle})")
         for w in result.warnings:
             print(f"  warning: {w}")
+        figures = _figures_note(result)
+        if figures:
+            print(f"  figures: {figures}")
+        note = _uncaptured_images_note(result)
+        if note:
+            print(f"  note: {note}")
 
     if args.out:
         Path(args.out).write_text(result.rendered_text)
@@ -140,12 +182,19 @@ def cmd_hook_read(args) -> int:
     check below must stay dependency-free so the overwhelming majority of calls
     (.py, .md, etc.) pass through with negligible added latency."""
     payload = json.load(sys.stdin)
-    file_path = payload.get("tool_input", {}).get("file_path", "")
+    tool_input = payload.get("tool_input", {}) or {}
+    file_path = tool_input.get("file_path", "")
     session_id = payload.get("session_id")
     suffix = Path(file_path).suffix.lower()
 
     if suffix not in DISTILLABLE_EXTENSIONS:
         return 0  # pass through, no output, no heavy imports ever touched
+
+    # A ranged read asks for a specific slice; distillation is whole-file, so answering
+    # with the whole document (or its head) would silently return the wrong content.
+    # Pass through and let the native ranged read do its job.
+    if any(tool_input.get(k) is not None for k in ("pages", "offset", "limit")):
+        return 0
 
     from token_distiller import cache, pipeline
     from token_distiller.config import (
@@ -173,6 +222,12 @@ def cmd_hook_read(args) -> int:
         f"{result.distilled_tokens_est} tokens ({result.compression_ratio:.1f}x). "
         f"Methods: {result.method_counts()}."
     )
+    figures_note = _figures_note(result)
+    if figures_note:
+        header += f" Figures: {figures_note}."
+    images_note = _uncaptured_images_note(result)
+    if images_note:
+        header += f" Note: {images_note}."
     expand_hint = f"Full text: run `distill expand {handle}`." if handle is not None else ""
 
     if already_seen:
@@ -372,11 +427,36 @@ def cmd_audit(args) -> int:
     return 0
 
 
+def cmd_compress(args) -> int:
+    """Reads command output on stdin. Never runs a command: the caller pipes into this, so
+    no shell string is ever constructed from untrusted input."""
+    from token_distiller import bash_compress
+    from token_distiller.tokens import estimate_text_tokens
+
+    raw = sys.stdin.read()
+    compressed = bash_compress.compress(raw, kind=args.kind)
+
+    if args.stats:
+        before = estimate_text_tokens(raw)
+        after = estimate_text_tokens(compressed)
+        saved = (1 - after / before) * 100 if before else 0.0
+        print(
+            f"[token-distiller] {before} -> {after} tokens ({saved:.0f}% saved)",
+            file=sys.stderr,
+        )
+    print(compressed)
+    return 0
+
+
 def cmd_install_hook(args) -> int:
     from token_distiller import hook_installer
 
     target_path = hook_installer.resolve_target(args.target, args.project_dir)
-    print(hook_installer.install(target_path, dry_run=args.dry_run))
+    print(
+        hook_installer.install(
+            target_path, dry_run=args.dry_run, include_images=args.images
+        )
+    )
     return 0
 
 
@@ -390,6 +470,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_file.add_argument("--json", action="store_true")
     p_file.add_argument("--no-vision", action="store_true")
     p_file.add_argument("--no-cache", action="store_true")
+    p_file.add_argument(
+        "--no-figures",
+        action="store_true",
+        help="skip reading embedded figures (faster; leaves diagram content uncaptured)",
+    )
     p_file.add_argument("--no-save-log", action="store_true")
     p_file.set_defaults(func=cmd_file)
 
@@ -453,10 +538,26 @@ def build_parser() -> argparse.ArgumentParser:
     p_audit.add_argument("--json", action="store_true")
     p_audit.set_defaults(func=cmd_audit)
 
+    p_compress = sub.add_parser(
+        "compress", help="compress verbose command output read from stdin"
+    )
+    p_compress.add_argument(
+        "--kind",
+        choices=["auto", "git-status", "pytest", "install", "generic"],
+        default="auto",
+    )
+    p_compress.add_argument("--stats", action="store_true", help="report savings on stderr")
+    p_compress.set_defaults(func=cmd_compress)
+
     p_install = sub.add_parser("install-hook", help="wire the PreToolUse Read hook into settings.json")
     p_install.add_argument("--target", choices=["project", "global"], default="project")
     p_install.add_argument("--project-dir")
     p_install.add_argument("--dry-run", action="store_true")
+    p_install.add_argument(
+        "--images",
+        action="store_true",
+        help="also intercept image reads (loses the model's own vision on them)",
+    )
     p_install.set_defaults(func=cmd_install_hook)
 
     return parser

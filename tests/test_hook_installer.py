@@ -25,9 +25,9 @@ def test_installed_hook_filters_on_file_patterns(tmp_path):
     pay for the hook."""
     target = _settings(tmp_path)
     hook_installer.install(target)
-    conditions = [h["if"] for h in json.loads(target.read_text())["hooks"]["PreToolUse"][0]["hooks"]]
-    assert "Read(*.pdf)" in conditions
-    assert "Read(*.png)" in conditions
+    entries = json.loads(target.read_text())["hooks"]["PreToolUse"][0]["hooks"]
+    assert all("if" in h for h in entries)
+    assert "Read(*.pdf)" in [h["if"] for h in entries]
 
 
 def test_install_preserves_unrelated_settings(tmp_path):
@@ -83,3 +83,21 @@ def test_global_target_resolves_to_home(tmp_path):
 def test_project_target_resolves_under_the_project(tmp_path):
     path = hook_installer.resolve_target("project", str(tmp_path))
     assert path == tmp_path / ".claude" / "settings.json"
+
+
+def test_default_install_covers_pdfs_only(tmp_path):
+    """Intercepting an image read replaces the model's own vision on it with OCR text, so
+    images are opt-in rather than default."""
+    target = _settings(tmp_path)
+    hook_installer.install(target)
+    conditions = [h["if"] for h in json.loads(target.read_text())["hooks"]["PreToolUse"][0]["hooks"]]
+    assert conditions == ["Read(*.pdf)"]
+
+
+def test_images_flag_opts_into_image_extensions(tmp_path):
+    target = _settings(tmp_path)
+    hook_installer.install(target, include_images=True)
+    conditions = [h["if"] for h in json.loads(target.read_text())["hooks"]["PreToolUse"][0]["hooks"]]
+    assert "Read(*.pdf)" in conditions
+    assert "Read(*.png)" in conditions
+    assert "Read(*.heic)" in conditions
