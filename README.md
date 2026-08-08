@@ -179,4 +179,4 @@ documents small enough to be read in full.
 
 **PolyForm Noncommercial 1.0.0.** Free for personal, private, and noncommercial use —
 no license purchase needed. Commercial use requires contacting Sri PriYa N. Chen
-(priya.n.chen@gmail.com) for a commercial license.
+(p.chen@NeoclassicalPopArt.com) for a commercial license.
