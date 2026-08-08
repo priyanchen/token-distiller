@@ -70,6 +70,15 @@ Two properties worth knowing:
   injection lives. Piping output that you already ran has no such surface. Automatic
   interception is deliberately not implemented for that reason.
 
+## Verified in a live session
+
+The `Read` interception was checked against a real Claude Code session, not only against
+synthetic hook payloads. A one-page PDF holding a canary string was read through the hook:
+the session reported `2,572 → 38 tokens` and the model quoted the canary correctly,
+confirming the substituted text is what actually reaches it. A second run asking for one
+specific page of a four-page PDF passed straight through to the native ranged read with no
+hook note, confirming a page range is never answered with whole-document content.
+
 ## How it avoids losing anything
 
 Every distillation is stored whole, keyed by a SHA-256 of the file's bytes, before any
