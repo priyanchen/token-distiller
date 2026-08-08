@@ -6,6 +6,8 @@ dist/
 build/
 .pytest_cache/
 data/
+.env
+.env.*
 .DS_Store
 **/.DS_Store
 
