@@ -129,3 +129,44 @@ def test_method_enum_round_trips_through_cache(pdf_factory):
     pipeline.distill(path)
     cached, _, _ = pipeline.distill(path)
     assert cached.pages[0].method is DistillMethod.NATIVE_TEXT
+
+
+def test_page_with_image_and_native_text_is_flagged(pdf_with_images_factory):
+    """The core case this exists for: a page has enough body text to skip OCR/vision
+    entirely, but also carries an embedded figure (diagram, illustration, chart) whose
+    content native-text extraction cannot see. It must still be reported as
+    native_text -- that's the correct method -- but flagged separately."""
+    path = pdf_with_images_factory(
+        pages=[
+            ["Plenty of native body text on this page, easily enough to skip OCR."],
+            ["This page has body text plus an embedded figure sitting beside it."],
+        ],
+        image_pages={1},
+    )
+    result, _, _ = pipeline.distill(path)
+    assert result.method_counts() == {"native_text": 2}
+    assert result.pages_with_uncaptured_images() == [1]
+    assert result.pages[1].image_count == 1
+    assert result.pages[0].image_count == 0
+
+
+def test_page_without_images_is_not_flagged(pdf_with_images_factory):
+    path = pdf_with_images_factory(
+        pages=[["Ordinary text-only page, nothing embedded, nothing to flag here."]],
+        image_pages=set(),
+    )
+    result, _, _ = pipeline.distill(path)
+    assert result.pages_with_uncaptured_images() == []
+
+
+def test_image_count_survives_cache_round_trip(pdf_with_images_factory):
+    from token_distiller import cache
+
+    path = pdf_with_images_factory(
+        pages=[["A page with a figure embedded next to a full paragraph of text."]],
+        image_pages={0},
+    )
+    _, handle, _ = pipeline.distill(path)
+    reloaded = cache.get_by_id(handle)
+    assert reloaded.pages[0].image_count == 1
+    assert reloaded.pages_with_uncaptured_images() == [0]

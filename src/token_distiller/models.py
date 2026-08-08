@@ -19,6 +19,14 @@ class PageResult:
     raw_tokens_est: int = 0
     distilled_tokens_est: int = 0
     warnings: list[str] = field(default_factory=list)
+    # Embedded images (diagrams, figures, illustrations) found on this page by the
+    # PDF's object structure, independent of whether the page also has a text layer.
+    # Only meaningful for method == NATIVE_TEXT: the OCR/vision paths already rasterize
+    # and read the whole page image, so nothing on it is missed. A native-text page
+    # with image_count > 0 is the case that matters -- text extraction reads the text
+    # layer only, so any information carried solely by the image is not represented
+    # anywhere in the distilled output.
+    image_count: int = 0
 
 
 @dataclass
@@ -66,3 +74,16 @@ class DistillResult:
         for p in self.pages:
             counts[p.method.value] = counts.get(p.method.value, 0) + 1
         return counts
+
+    def pages_with_uncaptured_images(self) -> list[int]:
+        """Page indices where native-text extraction ran -- so nothing ever rasterized
+        or OCR'd the page -- but the page also contains one or more embedded images.
+        Their content (a diagram, a figure, an illustration) is not lost or deferred
+        like large-document text; it was simply never read in the first place. This is
+        the one gap in the "nothing is discarded" guarantee: that guarantee covers text
+        that gets shortened, not image content on an otherwise-native-text page."""
+        return [
+            p.page_index
+            for p in self.pages
+            if p.method == DistillMethod.NATIVE_TEXT and p.image_count > 0
+        ]

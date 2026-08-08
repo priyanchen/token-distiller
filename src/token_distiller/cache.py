@@ -61,6 +61,7 @@ def _pages_to_json(result: DistillResult) -> str:
                 "raw_tokens_est": p.raw_tokens_est,
                 "distilled_tokens_est": p.distilled_tokens_est,
                 "warnings": p.warnings,
+                "image_count": p.image_count,
             }
             for p in result.pages
         ]
@@ -78,6 +79,10 @@ def _pages_from_json(blob: str) -> list[PageResult]:
             raw_tokens_est=d["raw_tokens_est"],
             distilled_tokens_est=d["distilled_tokens_est"],
             warnings=d["warnings"],
+            # .get() with a 0 default: cache rows written before this field existed
+            # don't have it, and a missing image count should read as "none seen",
+            # not raise on load.
+            image_count=d.get("image_count", 0),
         )
         for d in json.loads(blob)
     ]

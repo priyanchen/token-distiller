@@ -99,3 +99,30 @@ def test_unreadable_file_fails_open(monkeypatch, capsys, tmp_path):
     code, out = _run_hook(monkeypatch, capsys, str(broken))
     assert code == 0
     assert "hookSpecificOutput" not in out
+
+
+def test_hook_read_notes_pages_with_uncaptured_images(monkeypatch, capsys):
+    """The hook-read header must surface this, since it's the surface Claude actually
+    sees mid-session -- a note buried only in `distill file --json` would never reach
+    the model reading the file."""
+    from tests.conftest import make_pdf_with_images
+
+    path = make_pdf_with_images(
+        "/tmp/hook_img_test.pdf",
+        pages=[
+            ["Plain page with real text and nothing embedded on it at all here."],
+            ["This page carries body text plus an embedded figure right beside it."],
+        ],
+        image_pages={1},
+    )
+    _, out = _run_hook(monkeypatch, capsys, path, session_id="S_IMG")
+    reason = _reason(out)
+    assert "embedded image" in reason
+    assert "page" in reason.lower()
+
+
+def test_hook_read_omits_the_note_when_no_pages_have_images(monkeypatch, capsys, pdf_factory):
+    path = pdf_factory([["An entirely ordinary text-only page with nothing embedded."]])
+    _, out = _run_hook(monkeypatch, capsys, path)
+    reason = _reason(out)
+    assert "embedded image" not in reason

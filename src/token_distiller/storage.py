@@ -34,9 +34,24 @@ CREATE INDEX IF NOT EXISTS idx_runs_source_path ON runs(source_path);
 
 @contextmanager
 def connect():
+    """Opens one connection per call -- this is a low-traffic local CLI tool, not a
+    server, so there is no pool to manage.
+
+    WAL mode plus a busy_timeout matter specifically because of how this database is
+    used: Claude Code runs matched PreToolUse hooks in parallel, so a single turn that
+    issues several Read calls on distillable files can spawn multiple `distill
+    hook-read` processes that open this database at the same time. journal_mode=WAL
+    lets readers and a writer proceed concurrently instead of serializing on a single
+    rollback-journal lock, and busy_timeout makes any remaining lock wait (e.g. two
+    writers) retry for a bounded window instead of raising "database is locked"
+    immediately. Both are connection-scoped PRAGMAs in SQLite, so they must be set on
+    every connection -- there's no way to persist them file-wide.
+    """
     ensure_home()
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     try:
         conn.executescript(SCHEMA)
         yield conn

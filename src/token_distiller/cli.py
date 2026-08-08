@@ -22,8 +22,26 @@ def _result_to_dict(result) -> dict:
         "compression_ratio": round(result.compression_ratio, 2),
         "duration_ms": result.duration_ms,
         "warnings": result.warnings,
+        "pages_with_uncaptured_images": result.pages_with_uncaptured_images(),
         "text": result.text,
     }
+
+
+def _uncaptured_images_note(result, one_indexed: bool = True) -> str | None:
+    """One compact line, not one line per page -- a page list bloats exactly the thing
+    this tool exists to shrink, so this always summarizes rather than enumerating."""
+    pages = result.pages_with_uncaptured_images()
+    if not pages:
+        return None
+    shown = pages[:8]
+    offset = 1 if one_indexed else 0
+    page_list = ", ".join(str(p + offset) for p in shown)
+    more = f", +{len(pages) - 8} more" if len(pages) > 8 else ""
+    return (
+        f"{len(pages)} page(s) contain embedded image(s) (diagrams/figures/"
+        f"illustrations) that text extraction does not capture -- their content isn't "
+        f"in the distilled text at all (pages {page_list}{more})"
+    )
 
 
 def _mean_ocr_confidence(result):
@@ -88,6 +106,9 @@ def cmd_file(args) -> int:
             print(f"  handle: {handle}  (distill expand {handle})")
         for w in result.warnings:
             print(f"  warning: {w}")
+        note = _uncaptured_images_note(result)
+        if note:
+            print(f"  note: {note}")
 
     if args.out:
         Path(args.out).write_text(result.rendered_text)
@@ -173,6 +194,9 @@ def cmd_hook_read(args) -> int:
         f"{result.distilled_tokens_est} tokens ({result.compression_ratio:.1f}x). "
         f"Methods: {result.method_counts()}."
     )
+    images_note = _uncaptured_images_note(result)
+    if images_note:
+        header += f" Note: {images_note}."
     expand_hint = f"Full text: run `distill expand {handle}`." if handle is not None else ""
 
     if already_seen:

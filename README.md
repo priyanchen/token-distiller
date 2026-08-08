@@ -54,6 +54,16 @@ shortening happens. Anything the hook shortens carries a handle, and `distill ex
 - **Large documents defer rather than truncate.** Past `TOKEN_DISTILLER_LARGE_DOC_TOKENS`
   (default 8000) the hook returns a head plus retrieval instructions. Nothing is
   discarded — `distill expand` or `distill index` + `distill query` reach the rest.
+- **Pages with embedded images are flagged, not silently skipped.** Native-text
+  extraction reads a page's text layer only — a diagram, chart, or illustration sitting
+  next to that text isn't described anywhere in the output. Every native-text page's
+  embedded-image count is recorded, and `pages_with_uncaptured_images()` surfaces it as
+  one compact note (`"N page(s) contain embedded image(s) ... (pages 3, 12, 19, ...)"`)
+  in `distill file`'s output, `--json`, and the hook-read response Claude actually sees
+  — never one line per page. This is the one case the guarantee above doesn't fully
+  cover: text that gets shortened always expands back in full via `distill expand`;
+  image content on an otherwise-native-text page is flagged rather than distilled —
+  there's no OCR/vision path that reaches it automatically today.
 
 Toggle any of it off: `TOKEN_DISTILLER_CACHE=0`, `TOKEN_DISTILLER_REREAD_COLLAPSE=0`,
 `TOKEN_DISTILLER_BOILERPLATE=0`.
@@ -64,6 +74,25 @@ Toggle any of it off: `TOKEN_DISTILLER_CACHE=0`, `TOKEN_DISTILLER_REREAD_COLLAPS
 alone would cost. Reading a PDF natively renders each page to an image and bills those
 pixels on top of the text, so a 25-page text PDF costs ~60,000 tokens to read raw but
 ~1,800 distilled (33x). Scoring it as text-only would have reported a meaningless 1.0x.
+
+That 33x describes a *sparse* page, where a fixed per-page rendering cost dominates a
+small amount of actual text — it is not a document-size-independent multiplier. A
+densely-written page compresses by far less through this mechanism alone, because the
+distilled side scales with real content: measured on a 765-page, prose-dense book, the
+whole-document ratio was 4.77x (1,567,889 raw → 328,589 distilled), not 33x. That is
+expected, not a regression — a page's text cannot be compressed below its own token
+count by an extraction step that isn't lossy.
+
+For a document that size, the number that actually matters is not the whole-document
+ratio anyway. 328,589 distilled tokens is well past `TOKEN_DISTILLER_LARGE_DOC_TOKENS`
+(default 8000), so the hook's large-document deferral fires: a live session reading that
+765-page file through the hook receives a head plus a `distill index` / `distill query`
+pointer, measured at ~1,675 tokens — roughly **940x** against the 1,567,889 raw cost.
+(The payload embeds the file's absolute path, so the exact token count shifts a little
+with where the file lives.)
+For large documents, the deferral-and-retrieval path is where the real savings come
+from; the raw-vs-native-text mechanism the 33x figure describes matters most for
+documents small enough to be read in full.
 
 ## License
 

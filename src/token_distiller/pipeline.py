@@ -83,7 +83,7 @@ def distill_pdf(path: str, allow_vision: bool = True) -> DistillResult:
     native_pages = pdf_extract.extract_pages_with_dimensions(path)
     pages: list[PageResult] = []
 
-    for i, (native_text, width_pt, height_pt) in enumerate(native_pages):
+    for i, (native_text, width_pt, height_pt, image_count) in enumerate(native_pages):
         if pdf_extract.has_native_text(native_text):
             pages.append(
                 PageResult(
@@ -94,6 +94,7 @@ def distill_pdf(path: str, allow_vision: bool = True) -> DistillResult:
                         width_pt, height_pt, native_text
                     ),
                     distilled_tokens_est=estimate_text_tokens(native_text),
+                    image_count=image_count,
                 )
             )
         else:
