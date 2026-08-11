@@ -18,6 +18,13 @@ OCR_RETRY_MIN_WORDS = 3
 # Tesseract wants roughly 300-DPI text; crops smaller than this get scaled up first.
 OCR_MIN_UPSCALE_PX = 600
 OCR_UPSCALE_FACTOR = 2
+
+# Tesseract's own default is English, and it does not detect script automatically -- a
+# Hebrew or Arabic page OCR'd as "eng" returns near-nothing, which then surfaces as
+# "could not be read" rather than "wrong language". Accepts Tesseract's multi-language
+# form ("eng+heb") to cover a mixed-language corpus in one pass. `tesseract --list-langs`
+# shows what is installed locally.
+OCR_LANG = os.environ.get("TOKEN_DISTILLER_OCR_LANG", "eng")
 RENDER_DPI = 200  # rasterization DPI for text-less PDF pages
 
 VISION_MODEL = os.environ.get("TOKEN_DISTILLER_VISION_MODEL", "claude-sonnet-5")

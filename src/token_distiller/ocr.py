@@ -3,6 +3,7 @@ from PIL import Image, ImageOps
 from pytesseract import Output
 
 from token_distiller.config import (
+    OCR_LANG,
     OCR_MIN_UPSCALE_PX,
     OCR_RETRY_CONF_THRESHOLD,
     OCR_RETRY_MIN_WORDS,
@@ -63,10 +64,10 @@ def preprocess(image: Image.Image) -> Image.Image:
     return gray.point(lambda p: 255 if p > threshold else 0, mode="1")
 
 
-def ocr_image(image: Image.Image) -> tuple[str, float, int]:
+def ocr_image(image: Image.Image, lang: str = OCR_LANG) -> tuple[str, float, int]:
     """Returns (text, mean_word_confidence, word_count). Tesseract marks
     non-text boxes with conf=-1; those are excluded from both the text and the score."""
-    data = pytesseract.image_to_data(image, output_type=Output.DICT)
+    data = pytesseract.image_to_data(image, lang=lang, output_type=Output.DICT)
 
     words: list[str] = []
     confidences: list[float] = []
@@ -88,7 +89,7 @@ def ocr_image(image: Image.Image) -> tuple[str, float, int]:
     return full_text, mean_confidence, len(words)
 
 
-def ocr_image_best(image: Image.Image) -> tuple[str, float, int]:
+def ocr_image_best(image: Image.Image, lang: str = OCR_LANG) -> tuple[str, float, int]:
     """OCR the image as-is, then retry preprocessed and keep whichever read better.
 
     Retrying rather than always preprocessing matters: binarizing can destroy anti-aliased
@@ -96,12 +97,12 @@ def ocr_image_best(image: Image.Image) -> tuple[str, float, int]:
     is judged on word count first — a pass that finds no words is useless however confident
     it claims to be — then on confidence.
     """
-    raw = ocr_image(image)
+    raw = ocr_image(image, lang=lang)
     if raw[1] >= OCR_RETRY_CONF_THRESHOLD and raw[2] >= OCR_RETRY_MIN_WORDS:
         return raw
 
     try:
-        retried = ocr_image(preprocess(image))
+        retried = ocr_image(preprocess(image), lang=lang)
     except Exception:
         return raw
 
