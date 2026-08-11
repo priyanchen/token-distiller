@@ -52,6 +52,19 @@ so this tool gets a key without changing anyone else's auth.
 Set `VOYAGE_API_KEY` and `pip install ".[rag-semantic]"` to enable semantic (embedding)
 retrieval on top of the default BM25 keyword index.
 
+**OCR language.** `TOKEN_DISTILLER_OCR_LANG` defaults to `eng`. Tesseract does not detect
+script on its own, so a Hebrew, Arabic, or Cyrillic page read as English returns
+near-nothing — and that then surfaces as "could not be read", which looks like an
+unreadable diagram rather than the wrong language. Set it to the script you actually have,
+or use Tesseract's multi-language form to cover a mixed corpus in one pass:
+
+```bash
+export TOKEN_DISTILLER_OCR_LANG="eng+heb"
+```
+
+`tesseract --list-langs` shows what is installed locally; `brew install tesseract-lang`
+(or your distribution's `tesseract-ocr-<lang>` package) adds more.
+
 ## CLI
 
 Placeholders are uppercase; substitute your own path, directory, or question.
