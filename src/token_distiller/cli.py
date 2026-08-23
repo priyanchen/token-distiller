@@ -41,10 +41,14 @@ def _figures_note(result) -> str | None:
     described = result.pages_with_described_figures()
     if not described:
         return None
+    scope = (
+        f" (within the first {len(result.pages)} of {result.total_page_count} pages read)"
+        if result.is_partial else ""
+    )
     return (
         f"{result.figure_count} embedded figure(s) on {len(described)} page(s) were read "
         f"and transcribed into the text below, labelled [figure N on page M] "
-        f"(pages {_page_list(described)})"
+        f"(pages {_page_list(described)}){scope}"
     )
 
 
@@ -52,10 +56,15 @@ def _uncaptured_images_note(result, one_indexed: bool = True) -> str | None:
     pages = result.pages_with_uncaptured_images()
     if not pages:
         return None
+    scope = (
+        f" (within the first {len(result.pages)} of {result.total_page_count} pages read "
+        f"so far)"
+        if result.is_partial else ""
+    )
     return (
         f"{len(pages)} page(s) contain embedded image(s) (diagrams/figures/"
         f"illustrations) that could not be read -- their content isn't "
-        f"in the distilled text (pages {_page_list(pages, one_indexed)})"
+        f"in the distilled text (pages {_page_list(pages, one_indexed)}){scope}"
     )
 
 
@@ -228,8 +237,13 @@ def cmd_hook_read(args) -> int:
     try:
         hash_value = cache.content_hash(file_path)
         already_seen = REREAD_COLLAPSE_ENABLED and cache.seen_in_session(session_id, hash_value)
+        # Bounding a large PDF's extraction here, not just its displayed size below, is the
+        # actual fix: without it, a 765-page book was fully OCR'd and figure-read (59s, 60
+        # vision/OCR calls) to produce a reply that only ever shows ~1,500 tokens of it.
         result, handle, was_cached = pipeline.distill(
-            file_path, allow_vision=not args.no_vision
+            file_path,
+            allow_vision=not args.no_vision,
+            stop_after_tokens=LARGE_DOC_TOKEN_THRESHOLD,
         )
     except Exception as exc:
         print(json.dumps({"warning": f"token-distiller failed on {file_path}: {exc}"}))
@@ -249,7 +263,13 @@ def cmd_hook_read(args) -> int:
     images_note = _uncaptured_images_note(result)
     if images_note:
         header += f" Note: {images_note}."
-    expand_hint = f"Full text: run `distill expand {handle}`." if handle is not None else ""
+
+    # A partial result is never cached (see pipeline.distill), so there is no handle for it
+    # -- `distill index` on the path is what reaches the rest instead.
+    if handle is not None:
+        expand_hint = f"Full text: run `distill expand {handle}`."
+    else:
+        expand_hint = f'Full text: run `distill index "{file_path}"` then `distill query`.'
 
     if already_seen:
         body = (
@@ -258,14 +278,31 @@ def cmd_hook_read(args) -> int:
         )
     else:
         full = result.rendered_text
-        if estimate_text_tokens(full) > LARGE_DOC_TOKEN_THRESHOLD:
+        # result.is_partial covers the common case (bounded extraction stopped early).
+        # The token check still matters on its own: stop_after_tokens bounds text as pages
+        # are read, before figure OCR/vision runs, so a document that finished under the
+        # limit on text alone can still cross it once figure text is added -- and it is the
+        # only check at all for a single large image, which distill_pdf's bound never sees.
+        if result.is_partial or estimate_text_tokens(full) > LARGE_DOC_TOKEN_THRESHOLD:
             head = full[: int(LARGE_DOC_HEAD_TOKENS * 4)]
-            body = (
-                f"{header}\n\nLarge document — showing the first ~{LARGE_DOC_HEAD_TOKENS} "
-                f"tokens. Nothing was discarded: {expand_hint} "
-                f"Or search it with `distill index` + `distill query`.\n\n{head}\n\n"
-                f"[truncated here — {expand_hint}]"
-            )
+            if result.is_partial:
+                # expand_hint already says "run `distill index`" here (there is no
+                # handle), so a trailing "Or search it with distill index" would just
+                # repeat itself.
+                body = (
+                    f"{header}\n\nLarge document (distilled the first "
+                    f"{len(result.pages)} of {result.total_page_count} pages so far) — "
+                    f"showing the first ~{LARGE_DOC_HEAD_TOKENS} tokens of what was read. "
+                    f"Nothing was discarded: {expand_hint}\n\n{head}\n\n"
+                    f"[truncated here — {expand_hint}]"
+                )
+            else:
+                body = (
+                    f"{header}\n\nLarge document — showing the first "
+                    f"~{LARGE_DOC_HEAD_TOKENS} tokens. Nothing was discarded: {expand_hint} "
+                    f"Or search it with `distill index` + `distill query`.\n\n{head}\n\n"
+                    f"[truncated here — {expand_hint}]"
+                )
         else:
             body = f"{header}\n\n{full}"
 
