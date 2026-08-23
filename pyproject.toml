@@ -38,7 +38,7 @@ dependencies = [
 
 [project.optional-dependencies]
 rag-semantic = ["voyageai>=0.3"]
-dev = ["pytest>=8", "pytest-mock"]
+dev = ["pytest>=8", "pytest-mock", "httpx"]
 
 [project.scripts]
 distill = "token_distiller.cli:main"
