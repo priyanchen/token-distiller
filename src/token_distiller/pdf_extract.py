@@ -1,3 +1,6 @@
+import re
+import subprocess
+
 import pdfplumber
 from pdf2image import convert_from_path
 from PIL import Image
@@ -6,10 +9,57 @@ from token_distiller.config import (
     FIGURE_MIN_SIDE_PT,
     FIGURE_RENDER_DPI,
     MIN_NATIVE_TEXT_CHARS,
+    PDFTOTEXT_TIMEOUT_S,
     RENDER_DPI,
+    RTL_REORDER_ENABLED,
 )
 
 PDF_POINTS_PER_INCH = 72.0
+
+# Hebrew, Arabic, Syriac, Thaana, N'Ko, and the Hebrew/Arabic presentation-form blocks.
+# Matching on codepoint works even when the text is reversed, since reversal changes the
+# order of characters, not which characters they are.
+_RTL_RE = re.compile(
+    "[֐-׿؀-ۿ܀-ݏݐ-ݿހ-޿߀-߿"
+    "ࢠ-ࣿיִ-﷿ﹰ-﻿]"
+)
+
+# Poppler wraps every directional run in BiDi embedding controls. They are invisible and
+# carry no meaning once the text is already in logical order, but cost real tokens --
+# measured at 156 of 2054 characters (7.6%) on one Hebrew page.
+_BIDI_CONTROLS = dict.fromkeys(
+    [0x200E, 0x200F, *range(0x202A, 0x202F), *range(0x2066, 0x206A)]
+)
+
+
+def contains_rtl(text: str) -> bool:
+    return _RTL_RE.search(text) is not None
+
+
+def pdftotext_pages(pdf_path: str) -> list[str] | None:
+    """Page texts via poppler, which implements the Unicode bidirectional algorithm.
+
+    Returns None when poppler is unavailable or fails, so the caller keeps pdfplumber's
+    text rather than losing the page entirely: reversed text is bad, no text is worse.
+    """
+    try:
+        proc = subprocess.run(
+            ["pdftotext", "-q", pdf_path, "-"],
+            capture_output=True,
+            timeout=PDFTOTEXT_TIMEOUT_S,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    text = proc.stdout.decode("utf-8", errors="replace")
+    parts = text.split("\f")
+    # Poppler writes a form feed after every page including the last, so the split leaves one
+    # empty trailing element. Only that one may be dropped: rstrip("\f") would also swallow
+    # the feeds belonging to genuinely blank trailing pages, and the resulting page-count
+    # mismatch silently disables substitution for the whole document.
+    if parts and not parts[-1]:
+        parts.pop()
+    return [page.translate(_BIDI_CONTROLS).strip() for page in parts]
 
 
 def extract_native_pages(pdf_path: str) -> list[str]:
@@ -49,7 +99,31 @@ def extract_pages_with_figures(
             pages.append(
                 ((page.extract_text() or "").strip(), float(page.width), float(page.height), boxes)
             )
+    return _reorder_rtl_pages(pdf_path, pages)
+
+
+def _reorder_rtl_pages(
+    pdf_path: str, pages: list[tuple[str, float, float, list]]
+) -> list[tuple[str, float, float, list]]:
+    """Replace the text of RTL pages with poppler's logically-ordered version.
+
+    Substitution is per page and only where pdfplumber actually saw RTL characters, so a
+    Latin-script document takes a byte-identical path to before this existed. A page-count
+    mismatch aborts the whole substitution: the two extractors would then disagree about the
+    document's structure, and pairing text with the wrong page's figures is a worse failure
+    than reversed text.
+    """
+    if not RTL_REORDER_ENABLED or not any(contains_rtl(text) for text, _, _, _ in pages):
         return pages
+
+    reordered = pdftotext_pages(pdf_path)
+    if reordered is None or len(reordered) != len(pages):
+        return pages
+
+    return [
+        (reordered[i] if contains_rtl(text) and reordered[i] else text, w, h, boxes)
+        for i, (text, w, h, boxes) in enumerate(pages)
+    ]
 
 
 def page_count(pdf_path: str) -> int:
