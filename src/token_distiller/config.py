@@ -25,6 +25,14 @@ OCR_UPSCALE_FACTOR = 2
 # form ("eng+heb") to cover a mixed-language corpus in one pass. `tesseract --list-langs`
 # shows what is installed locally.
 OCR_LANG = os.environ.get("TOKEN_DISTILLER_OCR_LANG", "eng")
+
+# pdfplumber returns glyphs in visual order, so a right-to-left script comes out with every
+# word reversed -- silently, with no confidence score to flag it. Poppler's pdftotext
+# implements the Unicode bidirectional algorithm and returns logical order, so it is used
+# for pages that actually contain RTL text. Poppler is already required (pdf2image).
+RTL_REORDER_ENABLED = os.environ.get("TOKEN_DISTILLER_RTL_REORDER", "1") != "0"
+PDFTOTEXT_TIMEOUT_S = 120
+
 RENDER_DPI = 200  # rasterization DPI for text-less PDF pages
 
 VISION_MODEL = os.environ.get("TOKEN_DISTILLER_VISION_MODEL", "claude-sonnet-5")

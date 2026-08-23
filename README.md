@@ -65,6 +65,17 @@ export TOKEN_DISTILLER_OCR_LANG="eng+heb"
 `tesseract --list-langs` shows what is installed locally; `brew install tesseract-lang`
 (or your distribution's `tesseract-ocr-<lang>` package) adds more.
 
+**Right-to-left text.** pdfplumber returns glyphs in visual order, so Hebrew and Arabic come
+out of a PDF's text layer with every word reversed — `עליון רמיית בית משפט` extracts as
+`טפשמ תיב תיימר ןוילע`. Unlike a weak OCR pass there is no confidence score to flag it, so
+the reversed text reaches the model looking like ordinary prose. Pages containing RTL script
+are therefore re-extracted with poppler's `pdftotext`, which implements the Unicode
+bidirectional algorithm and returns logical order. Poppler is already required, so this adds
+nothing to install. Latin-script documents never invoke it and take a byte-identical path
+(verified: a 447-page book distills to the same 326,597 tokens before and after). Poppler's
+BiDi embedding controls are stripped — invisible, meaningless once the text is ordered, and
+7.6% of the characters on a real Hebrew page. Disable with `TOKEN_DISTILLER_RTL_REORDER=0`.
+
 ## CLI
 
 Placeholders are uppercase; substitute your own path, directory, or question.
