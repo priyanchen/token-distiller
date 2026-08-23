@@ -4,23 +4,23 @@
       {
         "matcher": "Read",
         "hooks": [
-          { "type": "command", "if": "Read(*.pdf)", "command": "distill hook-read", "timeout": 60000 },
-          { "type": "command", "if": "Read(*.jpg)", "command": "distill hook-read", "timeout": 60000 },
-          { "type": "command", "if": "Read(*.jpeg)", "command": "distill hook-read", "timeout": 60000 },
-          { "type": "command", "if": "Read(*.png)", "command": "distill hook-read", "timeout": 60000 },
-          { "type": "command", "if": "Read(*.heic)", "command": "distill hook-read", "timeout": 60000 },
-          { "type": "command", "if": "Read(*.heif)", "command": "distill hook-read", "timeout": 60000 },
-          { "type": "command", "if": "Read(*.tiff)", "command": "distill hook-read", "timeout": 60000 },
-          { "type": "command", "if": "Read(*.tif)", "command": "distill hook-read", "timeout": 60000 },
-          { "type": "command", "if": "Read(*.bmp)", "command": "distill hook-read", "timeout": 60000 },
-          { "type": "command", "if": "Read(*.webp)", "command": "distill hook-read", "timeout": 60000 }
+          { "type": "command", "if": "Read(*.pdf)", "command": "distill hook-read", "timeout": 300 },
+          { "type": "command", "if": "Read(*.jpg)", "command": "distill hook-read", "timeout": 300 },
+          { "type": "command", "if": "Read(*.jpeg)", "command": "distill hook-read", "timeout": 300 },
+          { "type": "command", "if": "Read(*.png)", "command": "distill hook-read", "timeout": 300 },
+          { "type": "command", "if": "Read(*.heic)", "command": "distill hook-read", "timeout": 300 },
+          { "type": "command", "if": "Read(*.heif)", "command": "distill hook-read", "timeout": 300 },
+          { "type": "command", "if": "Read(*.tiff)", "command": "distill hook-read", "timeout": 300 },
+          { "type": "command", "if": "Read(*.tif)", "command": "distill hook-read", "timeout": 300 },
+          { "type": "command", "if": "Read(*.bmp)", "command": "distill hook-read", "timeout": 300 },
+          { "type": "command", "if": "Read(*.webp)", "command": "distill hook-read", "timeout": 300 }
         ]
       }
     ],
     "PostToolUse": [
       {
         "hooks": [
-          { "type": "command", "command": "distill hook-activity", "timeout": 5000 }
+          { "type": "command", "command": "distill hook-activity", "timeout": 10 }
         ]
       }
     ]

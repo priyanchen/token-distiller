@@ -1,6 +1,7 @@
 import io
 import json
 from argparse import Namespace
+from pathlib import Path
 
 from token_distiller import cli
 
@@ -83,12 +84,56 @@ def test_edited_file_is_not_collapsed(monkeypatch, capsys, tmp_path):
 
 
 def test_large_document_defers_instead_of_truncating(monkeypatch, capsys, pdf_factory):
+    """Bounded extraction means a large document is never cached (see pipeline.distill),
+    so it has no handle -- the reply must point at `distill index` on the path instead of
+    claiming an expand handle that doesn't exist."""
     monkeypatch.setattr("token_distiller.config.LARGE_DOC_TOKEN_THRESHOLD", 20)
     path = pdf_factory([["padding line " * 6] * 12 for _ in range(4)])
     _, out = _run_hook(monkeypatch, capsys, path, session_id="S_BIG")
     reason = _reason(out)
-    assert "distill expand" in reason
+    assert "distill expand" not in reason
+    assert "distill index" in reason
     assert "Nothing was discarded" in reason
+
+
+def test_large_document_reply_states_pages_read_so_far(monkeypatch, capsys, pdf_factory):
+    """The plan for this change was explicit: never state a partial page count as if it
+    covered the document. The reply has to say how many of the total were actually read."""
+    monkeypatch.setattr("token_distiller.config.LARGE_DOC_TOKEN_THRESHOLD", 20)
+    path = pdf_factory([["padding line " * 6] * 12 for _ in range(4)])
+    _, out = _run_hook(monkeypatch, capsys, path, session_id="S_PAGES")
+    reason = _reason(out)
+    assert "of 4 pages" in reason
+
+
+def test_large_document_can_still_be_fully_reached_via_index_and_query(
+    monkeypatch, capsys, pdf_factory
+):
+    """The whole justification for bounding the hook's extraction is that nothing is
+    actually lost -- `distill index` always runs unbounded (repo_pack.pack never passes
+    stop_after_tokens), so content past the deferred prefix must still be reachable."""
+    from token_distiller import chunker, index_store, repo_pack, retrieval
+
+    monkeypatch.setattr("token_distiller.config.LARGE_DOC_TOKEN_THRESHOLD", 20)
+    path = pdf_factory(
+        [["intro filler " * 6] * 12, ["intro filler " * 6] * 12,
+         ["the needle sentence found only on this later page"],
+         ["closing filler " * 6] * 12],
+        name="big.pdf",
+    )
+
+    _, out = _run_hook(monkeypatch, capsys, path, session_id="S_INDEX")
+    assert "distill index" in _reason(out)  # confirms it actually deferred
+
+    result = repo_pack.pack(str(Path(path).parent))
+    for f in result.files:
+        index_store.clear_source(f.path)
+        pieces = chunker.chunk_text(f.text)
+        if pieces:
+            index_store.add_chunks(f.path, pieces)
+
+    hits = retrieval.query("needle sentence", top_k=3, use_semantic=False)
+    assert any("needle sentence" in h["text"] for h in hits)
 
 
 def test_unreadable_file_fails_open(monkeypatch, capsys, tmp_path):

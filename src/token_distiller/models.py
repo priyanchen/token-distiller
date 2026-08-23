@@ -52,6 +52,15 @@ class DistillResult:
     pages: list[PageResult]
     duration_ms: int = 0
     boilerplate: list[dict] = field(default_factory=list)
+    # True only when a caller passed stop_after_tokens and extraction stopped before the
+    # document's actual last page. pages then covers a prefix, not the whole document --
+    # never cached (cache.put is skipped for a partial result), so a stored handle can
+    # never silently mean less than what distill expand promises.
+    is_partial: bool = False
+    # The document's real page count, set only when is_partial is True. Lets a caller say
+    # "first N of M pages" rather than stating a partial count as if it were the whole
+    # document.
+    total_page_count: int | None = None
 
     @property
     def raw_tokens_est(self) -> int:

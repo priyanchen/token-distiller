@@ -101,3 +101,20 @@ def test_images_flag_opts_into_image_extensions(tmp_path):
     assert "Read(*.pdf)" in conditions
     assert "Read(*.png)" in conditions
     assert "Read(*.heic)" in conditions
+
+
+def test_hook_timeout_is_in_seconds_not_milliseconds(tmp_path):
+    """The `timeout` field on a Claude Code hook is documented in seconds (default 600 for
+    a command hook). This install wrote 60000 -- which reads as sixty seconds if you assume
+    milliseconds, but is actually 60000 seconds (16.7 hours) -- and nothing caught it until
+    it was checked directly against the docs. A sane upper bound here is what would have
+    caught that: 60000 fails it outright, any real timeout in seconds does not.
+    """
+    target = _settings(tmp_path)
+    hook_installer.install(target)
+    entries = json.loads(target.read_text())["hooks"]["PreToolUse"][0]["hooks"]
+    for h in entries:
+        assert 0 < h["timeout"] <= 600, (
+            f"timeout {h['timeout']} is not a plausible number of seconds "
+            f"(Claude Code's own default for a command hook is 600)"
+        )
