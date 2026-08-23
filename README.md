@@ -66,8 +66,8 @@ export TOKEN_DISTILLER_OCR_LANG="eng+heb"
 (or your distribution's `tesseract-ocr-<lang>` package) adds more.
 
 **Right-to-left text.** pdfplumber returns glyphs in visual order, so Hebrew and Arabic come
-out of a PDF's text layer with every word reversed — `עליון רמיית בית משפט` extracts as
-`טפשמ תיב תיימר ןוילע`. Unlike a weak OCR pass there is no confidence score to flag it, so
+out of a PDF's text layer with every word reversed — `שלום עולם` extracts as
+`םלוע םולש`. Unlike a weak OCR pass there is no confidence score to flag it, so
 the reversed text reaches the model looking like ordinary prose. Pages containing RTL script
 are therefore re-extracted with poppler's `pdftotext`, which implements the Unicode
 bidirectional algorithm and returns logical order. Poppler is already required, so this adds

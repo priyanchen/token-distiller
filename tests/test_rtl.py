@@ -13,7 +13,7 @@ from token_distiller import pdf_extract
 
 
 def test_detects_hebrew():
-    assert pdf_extract.contains_rtl("עליון רמיית בית משפט")
+    assert pdf_extract.contains_rtl("שלום עולם")
 
 
 def test_detects_arabic():
@@ -28,7 +28,7 @@ def test_latin_is_not_rtl():
 def test_detects_rtl_even_when_reversed():
     """Detection has to work on pdfplumber's reversed output, which is the only form we
     ever see before deciding to re-extract."""
-    assert pdf_extract.contains_rtl("טפשמ תיב תיימר ןוילע")
+    assert pdf_extract.contains_rtl("םלוע םולש")
 
 
 def test_bidi_controls_are_stripped():
@@ -147,7 +147,7 @@ def test_sample_is_rtl_true_for_a_document_with_hebrew_pages(monkeypatch):
             return self._text
 
     class FakePdf:
-        pages = [FakePage("Latin front matter.")] * 3 + [FakePage("עליון רמיית בית משפט")]
+        pages = [FakePage("Latin front matter.")] * 3 + [FakePage("שלום עולם")]
 
         def __enter__(self):
             return self
