@@ -32,6 +32,7 @@ OCR_LANG = os.environ.get("TOKEN_DISTILLER_OCR_LANG", "eng")
 # for pages that actually contain RTL text. Poppler is already required (pdf2image).
 RTL_REORDER_ENABLED = os.environ.get("TOKEN_DISTILLER_RTL_REORDER", "1") != "0"
 PDFTOTEXT_TIMEOUT_S = 120
+
 RENDER_DPI = 200  # rasterization DPI for text-less PDF pages
 
 VISION_MODEL = os.environ.get("TOKEN_DISTILLER_VISION_MODEL", "claude-sonnet-5")

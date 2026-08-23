@@ -52,7 +52,14 @@ def pdftotext_pages(pdf_path: str) -> list[str] | None:
     except (OSError, subprocess.SubprocessError):
         return None
     text = proc.stdout.decode("utf-8", errors="replace")
-    return [page.translate(_BIDI_CONTROLS).strip() for page in text.rstrip("\f").split("\f")]
+    parts = text.split("\f")
+    # Poppler writes a form feed after every page including the last, so the split leaves one
+    # empty trailing element. Only that one may be dropped: rstrip("\f") would also swallow
+    # the feeds belonging to genuinely blank trailing pages, and the resulting page-count
+    # mismatch silently disables substitution for the whole document.
+    if parts and not parts[-1]:
+        parts.pop()
+    return [page.translate(_BIDI_CONTROLS).strip() for page in parts]
 
 
 def extract_native_pages(pdf_path: str) -> list[str]:

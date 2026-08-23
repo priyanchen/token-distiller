@@ -98,3 +98,33 @@ def test_disabling_the_feature_skips_substitution(monkeypatch):
     )
     pages = [("טפשמ תיב", 600.0, 800.0, [])]
     assert pdf_extract._reorder_rtl_pages("x.pdf", pages) == pages
+
+
+def _fake_pdftotext(monkeypatch, stdout: bytes):
+    class Proc:
+        pass
+
+    proc = Proc()
+    proc.stdout = stdout
+    monkeypatch.setattr(subprocess, "run", lambda *_a, **_k: proc)
+
+
+def test_trailing_blank_pages_are_preserved(monkeypatch):
+    """Poppler writes a form feed after every page, so only the single empty element after
+    the last one may be dropped. rstrip("\f") also swallowed the feeds of genuinely blank
+    trailing pages: a real 351-page book reported 349, which tripped the page-count guard
+    and silently disabled RTL substitution for the entire document.
+    """
+    # two pages of text followed by two blank pages
+    _fake_pdftotext(monkeypatch, "one\ftwo\f\f\f".encode())
+    assert pdf_extract.pdftotext_pages("x.pdf") == ["one", "two", "", ""]
+
+
+def test_single_page_document_yields_one_page(monkeypatch):
+    _fake_pdftotext(monkeypatch, "only\f".encode())
+    assert pdf_extract.pdftotext_pages("x.pdf") == ["only"]
+
+
+def test_empty_output_yields_no_pages(monkeypatch):
+    _fake_pdftotext(monkeypatch, b"")
+    assert pdf_extract.pdftotext_pages("x.pdf") == []
