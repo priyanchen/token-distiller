@@ -1,6 +1,8 @@
 import time
 from pathlib import Path
 
+import anthropic
+
 from token_distiller import (
     boilerplate as boilerplate_mod,
     cache,
@@ -44,7 +46,11 @@ def _distill_ocr_or_vision(page_index: int, image, allow_vision: bool = True) ->
                 raw_tokens_est=raw_tokens,
                 distilled_tokens_est=estimate_text_tokens(vision_text),
             )
-        except vision_fallback.VisionUnavailable as exc:
+        except (vision_fallback.VisionUnavailable, anthropic.APIError) as exc:
+            # A key configuration problem (VisionUnavailable) and a live API failure
+            # (rate limit, auth, network, outage) both mean "no vision fallback for this
+            # page" -- degrading to the OCR text either way beats losing the whole
+            # distillation to one page's transient API error.
             return PageResult(
                 page_index=page_index,
                 method=DistillMethod.OCR_DEGRADED,
@@ -54,7 +60,7 @@ def _distill_ocr_or_vision(page_index: int, image, allow_vision: bool = True) ->
                 raw_tokens_est=raw_tokens,
                 distilled_tokens_est=estimate_text_tokens(text),
                 warnings=[
-                    f"low OCR confidence ({mean_conf:.1f}) and no vision fallback available: {exc}"
+                    f"low OCR confidence ({mean_conf:.1f}) and vision fallback unavailable: {exc}"
                 ],
             )
 
@@ -114,7 +120,11 @@ def _read_figures(
             if allow_vision:
                 try:
                     text = vision_fallback.describe_image(crop, prompt=FIGURE_PROMPT)
-                except vision_fallback.VisionUnavailable:
+                except (vision_fallback.VisionUnavailable, anthropic.APIError):
+                    # Same reasoning as the page-level fallback: a live API failure here
+                    # must not abort the rest of the document. The figure stays unread and
+                    # the page stays flagged via pages_with_uncaptured_images() -- the
+                    # honest outcome _read_figures already promises for any failure.
                     pass
         if text and text.strip():
             recovered.append(text.strip())
