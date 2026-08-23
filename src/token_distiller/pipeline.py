@@ -17,6 +17,7 @@ from token_distiller.config import (
     DESCRIBE_FIGURES,
     FIGURE_PROMPT,
     FIGURE_RENDER_DPI,
+    LARGE_DOC_MAX_PAGES,
     OCR_CONF_THRESHOLD,
     OCR_MIN_WORD_COUNT,
     PDF_EXTENSIONS,
@@ -192,6 +193,14 @@ def _distill_pages_bounded(
     bounded to the prefix) and only if a page in the prefix actually contains RTL text --
     the vast majority of documents never trigger it at all.
 
+    Stops on whichever of two conditions comes first: accumulated distilled_tokens_est
+    crossing stop_after_tokens, or LARGE_DOC_MAX_PAGES pages read. The token bound alone
+    isn't enough -- a sparse scanned page can be nearly empty and still cost full OCR time,
+    so a long, sparse scanned document could climb well past any reasonable wall-clock
+    budget while never crossing a token threshold at all. The page cap exists specifically
+    for that case; a dense document never reaches it, since it already crosses the token
+    bound first.
+
     Skips bounding entirely for a document _sample_is_rtl finds RTL: that path is already
     fast in full via poppler, so there is nothing to save by stopping early.
 
@@ -241,7 +250,7 @@ def _distill_pages_bounded(
 
         pages.append(page)
         cumulative_tokens += page.distilled_tokens_est
-        if cumulative_tokens > stop_after_tokens:
+        if cumulative_tokens > stop_after_tokens or len(pages) >= LARGE_DOC_MAX_PAGES:
             is_partial = True
             break
 

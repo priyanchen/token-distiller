@@ -167,12 +167,13 @@ shortening happens. Anything the hook shortens carries a handle, and `distill ex
   cache), so it has no expand handle — `distill index "<path>"` then `distill query` reach
   the rest instead. Skipped entirely for a document identified as right-to-left: that path
   already reads the whole file in one fast pass (see below), so there's nothing to defer.
-  One residual case is intentionally not specially handled: a scanned document whose pages
-  are individually very sparse can take many pages to accumulate 8000 distilled tokens,
-  and each page still costs full OCR time regardless of how little text it contains
-  (measured: ~1.75–2s/page). At that rate 300s (the hook's timeout) covers roughly 150–170
-  such pages; past that the hook times out and Claude Code's normal `Read` proceeds
-  undistilled for that one file, the same fail-open behavior as any other hook error.
+  A second, independent bound protects the case a token limit alone can't: a scanned page
+  can be nearly empty and still cost full OCR time (measured ~1.75–2s/page), so a long,
+  sparse scanned document could climb well past any reasonable time budget while its token
+  total never crosses anything. `TOKEN_DISTILLER_LARGE_DOC_MAX_PAGES` (default 100) caps
+  page count directly regardless of tokens accumulated — chosen so even the OCR-cost
+  worst case stays comfortably under the hook's 300s timeout, while a dense document never
+  reaches it at all (both books above stopped at page 11 and 21, nowhere near 100).
 - **Embedded figures are read, not skipped.** Native-text extraction sees a page's text
   layer only, so a diagram sitting beside that text would otherwise go unread. Each
   embedded figure is cropped out by its bounding box and put through the same OCR →

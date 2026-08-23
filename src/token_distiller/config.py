@@ -88,6 +88,13 @@ BOILERPLATE_ENABLED = os.environ.get("TOKEN_DISTILLER_BOILERPLATE", "1") != "0"
 # document. Deferred, not dropped: the full text stays retrievable via `distill expand`.
 LARGE_DOC_TOKEN_THRESHOLD = int(os.environ.get("TOKEN_DISTILLER_LARGE_DOC_TOKENS", "8000"))
 LARGE_DOC_HEAD_TOKENS = 1500
+# A second, independent bound on the same loop: a scanned page can be nearly empty and
+# still cost full OCR time (measured ~2s/page on a real document), so a token-only bound
+# never triggers on a long, sparse scanned document while wall-clock time keeps climbing.
+# 100 pages x ~2s/page is comfortably under the hook's 300s timeout with margin to spare,
+# and dense documents never reach it -- they already cross LARGE_DOC_TOKEN_THRESHOLD well
+# before page 100 (measured: page 11-21 on two real books).
+LARGE_DOC_MAX_PAGES = int(os.environ.get("TOKEN_DISTILLER_LARGE_DOC_MAX_PAGES", "100"))
 
 # --- M6: reading figures embedded in otherwise-text pages ---
 # Native text extraction cannot see a diagram, so each embedded figure is cropped out and

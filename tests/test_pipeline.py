@@ -478,3 +478,54 @@ def test_stop_after_tokens_bounds_ocr_pages_too(monkeypatch):
     assert total == 50
     assert len(pages) < 50
     assert calls["n"] == len(pages)  # OCR ran only on the pages actually kept
+
+
+def test_page_cap_stops_a_sparse_scanned_document_tokens_never_would(monkeypatch):
+    """The gap this closes: a sparse scanned page can be nearly empty and still cost full
+    OCR time, so a token-only bound never triggers on a long, sparse scanned document while
+    wall-clock time keeps climbing. Simulates 500 pages each contributing almost nothing to
+    the token total -- if only the token bound existed, this would read and OCR all 500."""
+    from token_distiller import pipeline
+    from token_distiller.models import DistillMethod, PageResult
+
+    calls = {"n": 0}
+
+    def fake_ocr(i, image, allow_vision=True):
+        calls["n"] += 1
+        return PageResult(
+            page_index=i, method=DistillMethod.OCR, text="x",
+            raw_tokens_est=500, distilled_tokens_est=1,  # near-zero, deliberately
+        )
+
+    monkeypatch.setattr(pipeline, "_distill_ocr_or_vision", fake_ocr)
+    monkeypatch.setattr(pipeline.pdf_extract, "rasterize_page", lambda *a, **k: object())
+    monkeypatch.setattr(
+        pipeline.pdf_extract,
+        "iter_pages_with_figures",
+        lambda path: iter([("", 600.0, 800.0, [])] * 500),
+    )
+    monkeypatch.setattr(pipeline.pdf_extract, "page_count", lambda path: 500)
+    monkeypatch.setattr(pipeline.pdf_extract, "_sample_is_rtl", lambda path: False)
+    monkeypatch.setattr(pipeline, "LARGE_DOC_MAX_PAGES", 40)
+
+    pages, is_partial, total = pipeline._distill_pages_bounded(
+        "fake.pdf", describe_figures=True, allow_vision=False, stop_after_tokens=100_000
+    )
+
+    assert is_partial is True
+    assert total == 500
+    assert len(pages) == 40  # stopped by the page cap, not the (never-crossed) token bound
+    assert calls["n"] == 40
+
+
+def test_page_cap_never_triggers_on_a_dense_document(pdf_factory):
+    """A document that crosses the token threshold well before the page cap must stop for
+    that reason, not be affected by the cap at all -- confirms the cap is inert for the
+    common case it was measured against."""
+    from token_distiller import pipeline
+
+    path = pdf_factory([[f"page {i} filler text " * 20] for i in range(10)])
+    result = pipeline.distill_pdf(path, allow_vision=False, stop_after_tokens=50)
+
+    assert result.is_partial is True
+    assert len(result.pages) < 10  # stopped well short of any page-count concern
