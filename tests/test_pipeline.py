@@ -1,4 +1,6 @@
+import httpx
 import pytest
+from PIL import Image
 
 from token_distiller import pipeline
 from token_distiller.models import DistillMethod
@@ -303,3 +305,59 @@ def test_missing_key_names_both_variables(monkeypatch):
         assert "TOKEN_DISTILLER_ANTHROPIC_API_KEY" in str(exc)
     else:
         raise AssertionError("expected VisionUnavailable")
+
+
+def _fake_api_error():
+    """A real anthropic.APIError, not a stand-in -- the fix must catch the actual
+    exception type the SDK raises, not just something that looks like it."""
+    import anthropic
+
+    request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+    response = httpx.Response(401, request=request, json={"error": {"message": "invalid"}})
+    return anthropic.AuthenticationError(
+        message="invalid x-api-key", response=response, body=None
+    )
+
+
+def test_page_level_vision_api_error_degrades_instead_of_crashing(monkeypatch):
+    """A live API failure (bad key, rate limit, outage) must degrade the page to OCR text,
+    the same as VisionUnavailable does -- not raise and abort the whole distillation."""
+    from token_distiller import pipeline, vision_fallback
+
+    monkeypatch.setattr(
+        vision_fallback, "describe_image", lambda *a, **k: (_ for _ in ()).throw(_fake_api_error())
+    )
+    monkeypatch.setattr(
+        pipeline.ocr_mod, "ocr_image_best", lambda image: ("", 0.0, 0)
+    )  # forces needs_fallback=True regardless of real OCR
+
+    result = pipeline._distill_ocr_or_vision(0, Image.new("RGB", (10, 10), "white"))
+
+    assert result.method == DistillMethod.OCR_DEGRADED
+    assert any("vision fallback unavailable" in w for w in result.warnings)
+
+
+def test_figure_level_vision_api_error_leaves_page_flagged_not_raised(monkeypatch):
+    """Same failure at the figure level: _read_figures must skip the unreadable figure and
+    keep going, not let an API error propagate out of distill_pdf entirely."""
+    from token_distiller import pipeline, vision_fallback
+
+    monkeypatch.setattr(pipeline, "ocr_mod", pipeline.ocr_mod)
+    monkeypatch.setattr(
+        pipeline.ocr_mod, "ocr_image_best", lambda image: ("", 0.0, 0)
+    )
+    monkeypatch.setattr(
+        vision_fallback, "describe_image", lambda *a, **k: (_ for _ in ()).throw(_fake_api_error())
+    )
+    monkeypatch.setattr(
+        pipeline.pdf_extract, "rasterize_page", lambda *a, **k: Image.new("RGB", (100, 100), "white")
+    )
+    monkeypatch.setattr(
+        pipeline.pdf_extract, "crop_region", lambda page, bbox, height_pt: page
+    )
+
+    recovered = pipeline._read_figures(
+        "fake.pdf", 0, [(0.0, 0.0, 50.0, 50.0)], 100.0, allow_vision=True
+    )
+
+    assert recovered == []  # unreadable figure skipped, not raised
