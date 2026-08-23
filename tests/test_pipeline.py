@@ -361,3 +361,120 @@ def test_figure_level_vision_api_error_leaves_page_flagged_not_raised(monkeypatc
     )
 
     assert recovered == []  # unreadable figure skipped, not raised
+
+
+def test_stop_after_tokens_produces_a_partial_result(pdf_factory):
+    """The actual point of bounding: a document that would cross the limit stops before
+    reading every page, and says so."""
+    from token_distiller import pipeline
+
+    path = pdf_factory([[f"page {i} filler text " * 20] for i in range(10)])
+    result = pipeline.distill_pdf(path, allow_vision=False, stop_after_tokens=50)
+
+    assert result.is_partial is True
+    assert result.total_page_count == 10
+    assert len(result.pages) < 10
+
+
+def test_stop_after_tokens_is_a_no_op_under_the_limit(pdf_factory):
+    """A document that never crosses the limit must come out identical to an unbounded
+    call -- same pages, not marked partial, boilerplate detection still runs."""
+    from token_distiller import pipeline
+
+    path = pdf_factory([["a short document well under any threshold"]])
+    bounded = pipeline.distill_pdf(path, allow_vision=False, stop_after_tokens=50_000)
+    unbounded = pipeline.distill_pdf(path, allow_vision=False)
+
+    assert bounded.is_partial is False
+    assert bounded.total_page_count is None
+    assert len(bounded.pages) == len(unbounded.pages)
+    assert bounded.distilled_tokens_est == unbounded.distilled_tokens_est
+
+
+def test_partial_result_is_never_cached(pdf_factory):
+    """cache.put's INSERT OR REPLACE keys on content hash alone -- caching a partial result
+    would mean a handle silently covers less than what `distill expand` promises for that
+    same file's hash. distill() must skip the cache write entirely, not just fail to find
+    a stale entry."""
+    from token_distiller import cache, pipeline
+
+    path = pdf_factory([[f"page {i} filler text " * 20] for i in range(10)])
+    result, handle, was_cached = pipeline.distill(
+        path, allow_vision=False, stop_after_tokens=50
+    )
+
+    assert result.is_partial is True
+    assert handle is None
+    assert was_cached is False
+    assert cache.get(cache.content_hash(path)) is None
+
+
+def test_partial_result_skips_boilerplate_detection(pdf_factory):
+    """find_boilerplate needs a real majority of the document's pages to tell a repeated
+    footer from a structural marker; a partial prefix would confidently mislabel one for
+    the other. A partial result must carry no boilerplate manifest at all."""
+    from token_distiller import pipeline
+
+    pages = [["Repeated Footer Line", f"unique content on page {i}"] for i in range(10)]
+    path = pdf_factory(pages)
+
+    partial = pipeline.distill_pdf(path, allow_vision=False, stop_after_tokens=30)
+    complete = pipeline.distill_pdf(path, allow_vision=False)
+
+    assert partial.is_partial is True
+    assert partial.boilerplate == []
+    assert complete.boilerplate != []  # confirms this fixture does trigger detection normally
+
+
+def test_rtl_sampled_document_ignores_stop_after_tokens(monkeypatch, pdf_factory):
+    """An RTL document is already fast in full (poppler reads it in one subprocess call
+    regardless of how much is needed), so bounding it would add complexity for nothing --
+    confirmed here by forcing the RTL classification on an ordinary fixture and checking
+    the result is never marked partial even with an unreachably tiny limit."""
+    from token_distiller import pdf_extract, pipeline
+
+    monkeypatch.setattr(pdf_extract, "_sample_is_rtl", lambda _path: True)
+    path = pdf_factory([[f"page {i} filler text " * 20] for i in range(10)])
+
+    result = pipeline.distill_pdf(path, allow_vision=False, stop_after_tokens=1)
+
+    assert result.is_partial is False
+    assert len(result.pages) == 10
+
+
+def test_stop_after_tokens_bounds_ocr_pages_too(monkeypatch):
+    """The bound has to be on real distilled_tokens_est, not raw extracted text: a scanned
+    page has no native text at all, so accumulating on text alone would never cross the
+    limit and every page would still get OCR'd -- confirmed directly against an earlier
+    version of this function, which read and OCR'd all 50 simulated pages here before this
+    fix, never having bounded anything."""
+    from token_distiller import pipeline
+    from token_distiller.models import DistillMethod, PageResult
+
+    calls = {"n": 0}
+
+    def fake_ocr(i, image, allow_vision=True):
+        calls["n"] += 1
+        return PageResult(
+            page_index=i, method=DistillMethod.OCR, text="x" * 2000,
+            raw_tokens_est=500, distilled_tokens_est=500,
+        )
+
+    monkeypatch.setattr(pipeline, "_distill_ocr_or_vision", fake_ocr)
+    monkeypatch.setattr(pipeline.pdf_extract, "rasterize_page", lambda *a, **k: object())
+    monkeypatch.setattr(
+        pipeline.pdf_extract,
+        "iter_pages_with_figures",
+        lambda path: iter([("", 600.0, 800.0, [])] * 50),
+    )
+    monkeypatch.setattr(pipeline.pdf_extract, "page_count", lambda path: 50)
+    monkeypatch.setattr(pipeline.pdf_extract, "_sample_is_rtl", lambda path: False)
+
+    pages, is_partial, total = pipeline._distill_pages_bounded(
+        "fake.pdf", describe_figures=True, allow_vision=False, stop_after_tokens=1000
+    )
+
+    assert is_partial is True
+    assert total == 50
+    assert len(pages) < 50
+    assert calls["n"] == len(pages)  # OCR ran only on the pages actually kept

@@ -131,16 +131,17 @@ def _read_figures(
     return recovered
 
 
-def distill_pdf(
-    path: str, allow_vision: bool = True, describe_figures: bool | None = None
-) -> DistillResult:
-    start = time.monotonic()
-    if describe_figures is None:
-        describe_figures = DESCRIBE_FIGURES
-    native_pages = pdf_extract.extract_pages_with_figures(path)
+def _distill_native_pages(
+    path: str,
+    raw_pages,
+    describe_figures: bool,
+    allow_vision: bool,
+) -> list[PageResult]:
+    """Runs the NATIVE_TEXT/OCR dispatch shared by the complete and bounded extraction
+    paths -- figure reading and OCR/vision only happen here, on whatever pages the caller
+    already decided to keep, never during extraction itself."""
     pages: list[PageResult] = []
-
-    for i, (native_text, width_pt, height_pt, boxes) in enumerate(native_pages):
+    for i, (native_text, width_pt, height_pt, boxes) in enumerate(raw_pages):
         if pdf_extract.has_native_text(native_text):
             figures = (
                 _read_figures(path, i, boxes, height_pt, allow_vision)
@@ -164,8 +165,111 @@ def distill_pdf(
         else:
             image = pdf_extract.rasterize_page(path, i)
             pages.append(_distill_ocr_or_vision(i, image, allow_vision=allow_vision))
+    return pages
 
-    manifest = _apply_boilerplate(pages)
+
+def _distill_pages_bounded(
+    path: str,
+    describe_figures: bool,
+    allow_vision: bool,
+    stop_after_tokens: int,
+):
+    """Extracts and distills pages one at a time, stopping once the real accumulated
+    distilled_tokens_est -- OCR/vision and figure text included, not a raw-text estimate --
+    crosses stop_after_tokens.
+
+    OCR has to run inline rather than being deferred to a second pass: a scanned document's
+    pages have no native text at all, so accumulating on extracted text alone would never
+    cross any threshold and the bound would never trigger, while _distill_native_pages
+    still paid full OCR cost on every page it was handed afterward -- confirmed directly by
+    running a simulated 50-page scanned document through an earlier, text-only version of
+    this function: it returned all 50 pages, is_partial=False, never having bounded
+    anything. At the measured 1.75s/page on the OCR path, that gap alone would make
+    shrinking the hook's timeout unsafe for anything past roughly 170 scanned pages.
+
+    RTL correction is looked up at most once per call (poppler reads the whole document in
+    one subprocess call regardless of page count, so this is cheap even though it isn't
+    bounded to the prefix) and only if a page in the prefix actually contains RTL text --
+    the vast majority of documents never trigger it at all.
+
+    Skips bounding entirely for a document _sample_is_rtl finds RTL: that path is already
+    fast in full via poppler, so there is nothing to save by stopping early.
+
+    Returns (pages, is_partial, total_page_count). total_page_count is only meaningful when
+    is_partial is True.
+    """
+    total_page_count = pdf_extract.page_count(path)
+
+    if pdf_extract._sample_is_rtl(path):
+        raw_pages = pdf_extract.extract_pages_with_figures(path)
+        pages = _distill_native_pages(path, raw_pages, describe_figures, allow_vision)
+        return pages, False, None
+
+    pages: list[PageResult] = []
+    cumulative_tokens = 0
+    is_partial = False
+    rtl_reference: list[str] | None = None  # lazily fetched only if RTL text appears
+
+    for i, (text, width_pt, height_pt, boxes) in enumerate(
+        pdf_extract.iter_pages_with_figures(path)
+    ):
+        if pdf_extract.RTL_REORDER_ENABLED and pdf_extract.contains_rtl(text):
+            if rtl_reference is None:
+                rtl_reference = pdf_extract.pdftotext_pages(path) or []
+            if i < len(rtl_reference) and rtl_reference[i]:
+                text = rtl_reference[i]
+
+        if pdf_extract.has_native_text(text):
+            figures = (
+                _read_figures(path, i, boxes, height_pt, allow_vision)
+                if (describe_figures and boxes)
+                else []
+            )
+            page = PageResult(
+                page_index=i,
+                method=DistillMethod.NATIVE_TEXT,
+                text=text,
+                raw_tokens_est=estimate_pdf_page_host_tokens(width_pt, height_pt, text),
+                distilled_tokens_est=estimate_text_tokens(text)
+                + sum(estimate_text_tokens(f) for f in figures),
+                image_count=len(boxes),
+                figures=figures,
+            )
+        else:
+            image = pdf_extract.rasterize_page(path, i)
+            page = _distill_ocr_or_vision(i, image, allow_vision=allow_vision)
+
+        pages.append(page)
+        cumulative_tokens += page.distilled_tokens_est
+        if cumulative_tokens > stop_after_tokens:
+            is_partial = True
+            break
+
+    return pages, is_partial, (total_page_count if is_partial else None)
+
+
+def distill_pdf(
+    path: str,
+    allow_vision: bool = True,
+    describe_figures: bool | None = None,
+    stop_after_tokens: int | None = None,
+) -> DistillResult:
+    start = time.monotonic()
+    if describe_figures is None:
+        describe_figures = DESCRIBE_FIGURES
+
+    if stop_after_tokens is not None:
+        pages, is_partial, total_page_count = _distill_pages_bounded(
+            path, describe_figures, allow_vision, stop_after_tokens
+        )
+    else:
+        raw_pages = pdf_extract.extract_pages_with_figures(path)
+        pages = _distill_native_pages(path, raw_pages, describe_figures, allow_vision)
+        is_partial, total_page_count = False, None
+
+    # Boilerplate detection needs >=80% of the document's pages to tell a repeated footer
+    # from a structural marker; a partial prefix would confidently mislabel the latter.
+    manifest = [] if is_partial else _apply_boilerplate(pages)
     duration_ms = round((time.monotonic() - start) * 1000)
     return DistillResult(
         source_path=str(path),
@@ -173,6 +277,8 @@ def distill_pdf(
         pages=pages,
         duration_ms=duration_ms,
         boilerplate=manifest,
+        is_partial=is_partial,
+        total_page_count=total_page_count,
     )
 
 
@@ -187,11 +293,19 @@ def distill_image(path: str, allow_vision: bool = True) -> DistillResult:
 
 
 def _distill_uncached(
-    path: str, allow_vision: bool = True, describe_figures: bool | None = None
+    path: str,
+    allow_vision: bool = True,
+    describe_figures: bool | None = None,
+    stop_after_tokens: int | None = None,
 ) -> DistillResult:
     suffix = Path(path).suffix.lower()
     if suffix in PDF_EXTENSIONS:
-        return distill_pdf(path, allow_vision=allow_vision, describe_figures=describe_figures)
+        return distill_pdf(
+            path,
+            allow_vision=allow_vision,
+            describe_figures=describe_figures,
+            stop_after_tokens=stop_after_tokens,
+        )
     if image_ingest.is_image(path):
         return distill_image(path, allow_vision=allow_vision)
     raise ValueError(f"unsupported file type: {suffix}")
@@ -202,13 +316,24 @@ def distill(
     allow_vision: bool = True,
     use_cache: bool = True,
     describe_figures: bool | None = None,
+    stop_after_tokens: int | None = None,
 ) -> tuple[DistillResult, int | None, bool]:
     """Returns (result, cache_handle, was_cache_hit). The handle is what `distill expand`
-    resolves, so any caller that shortens its output can still point at the full text."""
+    resolves, so any caller that shortens its output can still point at the full text.
+
+    A partial result (stop_after_tokens caused early exit) is never cached and always
+    returns handle=None -- caching it would mean a stored handle silently covers less than
+    what `distill expand` promises, since cache.put's INSERT OR REPLACE keys on content
+    hash, not on completeness. The caller reaches the rest via `distill index` on the path
+    instead of a handle.
+    """
     if not (use_cache and CACHE_ENABLED):
         return (
             _distill_uncached(
-                path, allow_vision=allow_vision, describe_figures=describe_figures
+                path,
+                allow_vision=allow_vision,
+                describe_figures=describe_figures,
+                stop_after_tokens=stop_after_tokens,
             ),
             None,
             False,
@@ -222,7 +347,12 @@ def distill(
         return result, handle, True
 
     result = _distill_uncached(
-        path, allow_vision=allow_vision, describe_figures=describe_figures
+        path,
+        allow_vision=allow_vision,
+        describe_figures=describe_figures,
+        stop_after_tokens=stop_after_tokens,
     )
+    if result.is_partial:
+        return result, None, False
     handle = cache.put(hash_value, result)
     return result, handle, False

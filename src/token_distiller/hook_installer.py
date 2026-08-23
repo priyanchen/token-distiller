@@ -28,7 +28,7 @@ def _build_hook_entries(command: str, extensions: set[str] | None = None) -> lis
                 "type": "command",
                 "if": f"Read(*.{pattern})",
                 "command": command,
-                "timeout": 60000,
+                "timeout": 300,
             }
         )
     return entries

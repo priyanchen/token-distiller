@@ -76,6 +76,14 @@ nothing to install. Latin-script documents never invoke it and take a byte-ident
 BiDi embedding controls are stripped — invisible, meaningless once the text is ordered, and
 7.6% of the characters on a real Hebrew page. Disable with `TOKEN_DISTILLER_RTL_REORDER=0`.
 
+A document classified as RTL from a five-page sample (~0.2s) skips pdfplumber's per-page
+text extraction entirely and reads the whole thing through poppler in one pass instead —
+extraction is what actually costs time here, not the correction (measured: a 236-page
+Hebrew book, 33.2s → 2.9s, 11.5x, byte-identical output either way). A wholesale switch to
+poppler for every document was tried and rejected: poppler splits ligatures in every mode
+("specific" → "speci" + "c"), which would fragment words in Latin text. Gating on RTL
+detection keeps that risk at zero for the documents it can't help anyway.
+
 ## CLI
 
 Placeholders are uppercase; substitute your own path, directory, or question.
@@ -150,9 +158,21 @@ shortening happens. Anything the hook shortens carries a handle, and `distill ex
   qualify, so a running copyright footer (25/25 pages) collapses while a structural
   marker like `Example:` (15/25) is left alone. Collapsed lines are listed at the top of
   the output.
-- **Large documents defer rather than truncate.** Past `TOKEN_DISTILLER_LARGE_DOC_TOKENS`
-  (default 8000) the hook returns a head plus retrieval instructions. Nothing is
-  discarded — `distill expand` or `distill index` + `distill query` reach the rest.
+- **Large documents defer before doing the work, not after.** Past
+  `TOKEN_DISTILLER_LARGE_DOC_TOKENS` (default 8000) the hook stops *distilling*, not just
+  displaying — extraction, OCR, and figure-reading all stop once the running total crosses
+  the limit, instead of processing the whole document to show a head of it regardless.
+  Measured on two real ~350–450 page books: 22–28s dropped to ~1–1.5s, stopping at page
+  11–21 in both cases. A deferred document is never cached (there is nothing complete to
+  cache), so it has no expand handle — `distill index "<path>"` then `distill query` reach
+  the rest instead. Skipped entirely for a document identified as right-to-left: that path
+  already reads the whole file in one fast pass (see below), so there's nothing to defer.
+  One residual case is intentionally not specially handled: a scanned document whose pages
+  are individually very sparse can take many pages to accumulate 8000 distilled tokens,
+  and each page still costs full OCR time regardless of how little text it contains
+  (measured: ~1.75–2s/page). At that rate 300s (the hook's timeout) covers roughly 150–170
+  such pages; past that the hook times out and Claude Code's normal `Read` proceeds
+  undistilled for that one file, the same fail-open behavior as any other hook error.
 - **Embedded figures are read, not skipped.** Native-text extraction sees a page's text
   layer only, so a diagram sitting beside that text would otherwise go unread. Each
   embedded figure is cropped out by its bounding box and put through the same OCR →
