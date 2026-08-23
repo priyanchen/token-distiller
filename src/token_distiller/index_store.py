@@ -60,7 +60,7 @@ def add_chunks(source_path: str, texts: list[str]) -> list[int]:
 def add_embeddings(chunk_ids: list[int], vectors: list[list[float]], model: str) -> None:
     _ensure_schema()
     with connect() as conn:
-        for chunk_id, vector in zip(chunk_ids, vectors):
+        for chunk_id, vector in zip(chunk_ids, vectors, strict=True):
             conn.execute(
                 "INSERT OR REPLACE INTO chunk_embeddings (chunk_id, model, vector) VALUES (?, ?, ?)",
                 (chunk_id, model, json.dumps(vector)),
