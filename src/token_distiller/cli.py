@@ -196,6 +196,8 @@ def cmd_report(args) -> int:
     from token_distiller import storage
 
     summary = storage.savings_summary(since=args.since)
+    if args.rate is not None:
+        summary["dollars_saved_est"] = round(summary["tokens_saved_est"] / 1_000_000 * args.rate, 2)
     if args.json:
         print(json.dumps(summary, indent=2))
     else:
@@ -204,6 +206,8 @@ def cmd_report(args) -> int:
         print(f"distilled tokens: {summary['distilled_tokens_est']}")
         print(f"tokens saved:     {summary['tokens_saved_est']}")
         print(f"compression:      {summary['compression_ratio']:.1f}x")
+        if args.rate is not None:
+            print(f"est. $ saved:     ${summary['dollars_saved_est']:.2f}  (at ${args.rate:g}/1M tokens)")
     return 0
 
 
@@ -571,6 +575,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_report = sub.add_parser("report", help="cumulative token/savings report")
     p_report.add_argument("--since")
     p_report.add_argument("--json", action="store_true")
+    p_report.add_argument("--rate", type=float, help="dollars per 1M tokens, to estimate $ saved")
     p_report.set_defaults(func=cmd_report)
 
     p_hook = sub.add_parser("hook-read", help="internal: PreToolUse Read hook entry point")
