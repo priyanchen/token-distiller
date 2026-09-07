@@ -17,3 +17,5 @@ PR-BRIEF-*.md
 
 # personal test documents for scripts/verify_corpus.py -- never committed
 corpus/
+
+audit/
