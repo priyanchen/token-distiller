@@ -85,9 +85,81 @@ def pdftotext_pages(pdf_path: str) -> list[str] | None:
     return [page.translate(_BIDI_CONTROLS).strip() for page in parts]
 
 
+def _detect_column_split(page) -> float | None:
+    """An x-coordinate to split the page into two columns, or None if the page doesn't show
+    a consistent enough vertical gap to safely treat as two columns.
+
+    Deliberately conservative: a missed column page falls back to the single-pass call
+    below, unchanged from before this existed. A wrongly-detected split on a genuinely
+    single-column page is the failure mode that must never happen -- it would corrupt pages
+    that currently work correctly, trading a rare bug for a common one. So this requires the
+    same gap to reappear across several separate lines, not just one incidental wide space.
+    """
+    words = page.extract_words()
+    if len(words) < 20:
+        return None
+
+    rows: dict[int, list] = {}
+    for w in words:
+        rows.setdefault(round(w["top"] / 3), []).append(w)
+
+    page_width = float(page.width)
+    min_x, max_x = page_width * 0.25, page_width * 0.75
+    gap_midpoints = []
+    multiword_rows = 0
+    for row_words in rows.values():
+        if len(row_words) < 2:
+            continue
+        multiword_rows += 1
+        row_sorted = sorted(row_words, key=lambda w: w["x0"])
+        for a, b in zip(row_sorted, row_sorted[1:]):
+            gap_width = b["x0"] - a["x1"]
+            gap_mid = (a["x1"] + b["x0"]) / 2
+            if gap_width >= 24 and min_x <= gap_mid <= max_x:
+                gap_midpoints.append(gap_mid)
+
+    if multiword_rows < 4 or len(gap_midpoints) < max(3, multiword_rows * 0.4):
+        return None
+
+    gap_midpoints.sort()
+    median_gap = gap_midpoints[len(gap_midpoints) // 2]
+    # The found gaps must cluster near that median, not be scattered -- scattered gaps mean
+    # occasional wide word-spacing, not a real, consistent column boundary.
+    close_to_median = [g for g in gap_midpoints if abs(g - median_gap) <= 15]
+    if len(close_to_median) < max(3, multiword_rows * 0.4):
+        return None
+
+    return median_gap
+
+
+def _extract_page_text(page) -> str:
+    """Column-aware replacement for calling page.extract_text() directly. pdfplumber's
+    default sorts primarily by vertical position, so two genuine side-by-side columns at
+    the same height get interleaved word-by-word into one corrupted line -- confirmed on a
+    real two-column fixture. When a clear, consistent column boundary is detected, each side
+    is extracted separately and concatenated column-by-column; otherwise this returns
+    exactly what the unmodified single-pass call would, so single-column documents -- the
+    overwhelming majority, and everything the existing test suite already verifies -- take
+    the same path as before this existed.
+    """
+    split_x = _detect_column_split(page)
+    if split_x is None:
+        return (page.extract_text() or "").strip()
+
+    left = page.within_bbox((0, 0, split_x, page.height))
+    right = page.within_bbox((split_x, 0, float(page.width), page.height))
+    left_text = (left.extract_text() or "").strip()
+    right_text = (right.extract_text() or "").strip()
+    if not left_text or not right_text:
+        # One side empty means this wasn't really two columns -- a genuine column layout
+        # has real content on both sides of the split.
+        return (page.extract_text() or "").strip()
+    return f"{left_text}\n\n{right_text}"
+
+
 def extract_native_pages(pdf_path: str) -> list[str]:
     with pdfplumber.open(pdf_path) as pdf:
-        return [(page.extract_text() or "").strip() for page in pdf.pages]
+        return [_extract_page_text(page) for page in pdf.pages]
 
 
 def extract_pages_with_dimensions(pdf_path: str) -> list[tuple[str, float, float, int]]:
@@ -119,7 +191,7 @@ def extract_pages_with_figures(
 
     with pdfplumber.open(pdf_path) as pdf:
         pages = [
-            ((page.extract_text() or "").strip(), float(page.width), float(page.height), _page_figure_boxes(page))
+            (_extract_page_text(page), float(page.width), float(page.height), _page_figure_boxes(page))
             for page in pdf.pages
         ]
     return _reorder_rtl_pages(pdf_path, pages)
@@ -149,7 +221,7 @@ def iter_pages_with_figures(pdf_path: str):
     with pdfplumber.open(pdf_path) as pdf:
         for page in pdf.pages:
             yield (
-                (page.extract_text() or "").strip(),
+                _extract_page_text(page),
                 float(page.width),
                 float(page.height),
                 _page_figure_boxes(page),
