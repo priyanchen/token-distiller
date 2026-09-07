@@ -120,9 +120,11 @@ git status | distill compress
 npm install | distill compress
 ```
 
-Measured on this repo's own output: a 169-test `pytest` run goes **289 → 8 tokens (97%)**,
-keeping the failure list, the first assertion detail, and the summary line while dropping
-the wall of dots. Plain `git status` goes **153 → 58 tokens (62%)**, grouped by state.
+Measured against this repo's own output at time of writing — illustrative, not a fixed
+number; it moves as the suite grows and the working tree changes. A full `pytest` run of
+this project's own test suite went **307 → 12 tokens (96%)**, keeping the failure list, the
+first assertion detail, and the summary line while dropping the wall of dots. Plain
+`git status` went **105 → 23 tokens (78%)**, grouped by state.
 
 Two properties worth knowing:
 
