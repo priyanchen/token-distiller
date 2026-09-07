@@ -200,6 +200,66 @@ def make_pdf_with_legible_figure(path, page_text: str, figure_lines: list[str]) 
     return path
 
 
+def make_pdf_with_columns(path, pages: list[tuple[list[str], list[str]]]) -> str:
+    """Each page is (left_column_lines, right_column_lines), positioned side by side at
+    matching heights -- the layout pdfplumber's default extract_text() interleaves by
+    vertical position rather than reading column by column. Needs explicit (x, y)
+    placement, unlike make_pdf's auto-flowing single column, so it builds its own content
+    stream rather than reusing _pdf_content_stream."""
+    def _stream(left_lines, right_lines):
+        ops = []
+        y = 720
+        for line in left_lines:
+            safe = line.replace("\\", r"\\").replace("(", r"\(").replace(")", r"\)")
+            ops.append(f"BT /F1 11 Tf 72 {y} Td ({safe}) Tj ET")
+            y -= 24
+        y = 720
+        for line in right_lines:
+            safe = line.replace("\\", r"\\").replace("(", r"\(").replace(")", r"\)")
+            ops.append(f"BT /F1 11 Tf 320 {y} Td ({safe}) Tj ET")
+            y -= 24
+        return "\n".join(ops).encode("latin-1")
+
+    objects: list[bytes] = [b"", b"", b""]
+    kids = []
+    for left_lines, right_lines in pages:
+        stream = _stream(left_lines, right_lines)
+        page_obj_num = len(objects) + 1
+        content_obj_num = page_obj_num + 1
+        kids.append(page_obj_num)
+        objects.append(
+            f"<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 3 0 R >> >> "
+            f"/MediaBox [0 0 612 792] /Contents {content_obj_num} 0 R >>".encode()
+        )
+        objects.append(
+            b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream"
+        )
+
+    objects[0] = b"<< /Type /Catalog /Pages 2 0 R >>"
+    kids_ref = " ".join(f"{k} 0 R" for k in kids)
+    objects[1] = f"<< /Type /Pages /Kids [{kids_ref}] /Count {len(kids)} >>".encode()
+    objects[2] = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
+
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for i, body in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += f"{i} 0 obj\n".encode() + body + b"\nendobj\n"
+
+    xref = len(out)
+    n = len(objects) + 1
+    out += f"xref\n0 {n}\n".encode() + b"0000000000 65535 f \n"
+    for off in offsets:
+        out += f"{off:010d} 00000 n \n".encode()
+    out += b"trailer\n" + f"<< /Size {n} /Root 1 0 R >>\n".encode()
+    out += b"startxref\n" + f"{xref}\n".encode() + b"%%EOF"
+
+    path = str(path)
+    with open(path, "wb") as f:
+        f.write(out)
+    return path
+
+
 @pytest.fixture
 def pdf_with_images_factory(tmp_path):
     counter = {"n": 0}
@@ -220,6 +280,18 @@ def pdf_factory(tmp_path):
         counter["n"] += 1
         target = tmp_path / (name or f"doc{counter['n']}.pdf")
         return make_pdf(target, pages)
+
+    return _make
+
+
+@pytest.fixture
+def pdf_columns_factory(tmp_path):
+    counter = {"n": 0}
+
+    def _make(pages: list[tuple[list[str], list[str]]], name: str | None = None) -> str:
+        counter["n"] += 1
+        target = tmp_path / (name or f"doccol{counter['n']}.pdf")
+        return make_pdf_with_columns(target, pages)
 
     return _make
 
